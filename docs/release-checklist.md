@@ -565,6 +565,37 @@ What remains open, and is not a gate this record can close from here:
    samples, a rasterised scan and a broken XFA — but a random web slice and a captured scan remain
    collection work rather than engineering.
 
+## `1.7.0` (2026-11-14, tagged and published)
+
+This version adds a stationery plan: a background template per page range, with a default for the pages no
+assignment covers, recorded as the underlay form XObject the editor already writes.
+
+| Gate | State at `1.7.0` (in the working tree) | Evidence |
+| --- | --- | --- |
+| G1 — the surface | **Moved into `PublicAPI.Shipped.txt`** | 52 entries: `PdfStationery`, `PdfStationeryAssignment`, `PdfStationeryOperation`, `PdfEditOperationKind.ApplyStationery = 25` and `PdfEditPlan.ApplyStationery`. `RS0016` is a build error, and the snapshot test passes after the move |
+| G2 — the shipped leg | **Unchanged: both legs ship** | `dotnet pack` produced five `1.7.0` packages; `SharpCorePDF.Domain`, `.Application` and `.Infrastructure` carry `lib/net10.0` and `lib/net11.0` |
+| G3 — notes | **Written** | `CHANGELOG.md` holds `## [1.7.0] - 2026-11-14`, and `[Unreleased]` is empty again |
+| G9 — quality gate on the tree | **Green on `5ddd935`, the tagged commit** | `ci.yml` run `43597713484`: token check, build/test/analyse, **Tests on arm64** and **Native AOT smoke** all `success`; locally `dotnet test` **1185 passed, 0 failed** on each leg |
+| G4 — symbols and reproducible binaries | **Still partly** | tracked as #12: no `.snupkg` and no two-build comparison |
+| G5 — trusted publishing | **Unchanged, outside the tree** | the `1.6.0` policy needed no new subject |
+| G6 — a dry run on the commit to be tagged | **Not run separately** | the tag push was the publish run; `publish.yml` gates it on the SonarCloud verdict for the commit, which was green |
+| G7 — the tag equals `<Version>` | **Yes — `v1.7.0` on `5ddd935`, `<Version>` 1.7.0** | the tag names the commit whose analysis was the newest on `main` |
+| G8 — the packages reach the feed | **Yes, 2026-11-14 — `publish.yml` run `43598175378` pushed all five** | five `PUT …/api/v2/package` answered "Your package was pushed", one per id: `SharpCorePDF`, `.Domain`, `.Application`, `.Infrastructure` and `.DependencyInjection` at `1.7.0`; the `v3-flatcontainer` index catches up one id at a time while NuGet validates each package |
+
+What is deliberately not in this version, and is tracked rather than implied:
+
+- **#11 — P4, one-call diagnostics.** The roadmap intake schedules it for `1.7.0`; the stationery work took
+  the number, and P4 is still blocked on the truncated roadmap text (Q1 in
+  `specs/005-roadmap-intake/plan.md`).
+- **#10 — P5, PDF/A-2u/-3u/-4.** Still a decision gate with a veraPDF evidence path to agree.
+- **#13 — the parity row 22 fixture.** Write `PdfContentFixtures.Fonts()` to disk for the external validator.
+- **#12 — G4.** A symbol package and a reproducible-build comparison.
+
+The acceptance criteria of #6 are pinned one test each in
+`tests/SharpCorePDF.Tests/PdfDocumentEditorTests.StationeryAcceptance.cs`; the external `pikepdf`/`qpdf` run on
+the `stationery` example reported `qpdf check: no problems`, three pages, the three page sizes unchanged and
+`3` form XObjects with `0` image XObjects. The scoped Stryker run over `PdfStationery.cs` scored **100 %**.
+
 ## `1.6.0` (2026-11-14, tagged and published)
 
 This version is about archival evidence rather than new pages: the PDF/A output is checked by a pinned
