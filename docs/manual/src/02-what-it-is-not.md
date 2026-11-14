@@ -28,11 +28,12 @@ fixed-position cover.
 
 SharpCorePDF can change the **assembly** of an existing document: rotate a page, delete it, move it,
 duplicate it, insert an authored page, crop the area a page shows, and override the document information
-(Chapter 14). It can also add, edit and remove annotations (Chapter 18), and create, fill, reset and flatten
-form fields (Chapter 19) — structures stored beside a page rather than inside it. What it cannot do *in this
-release* is change what a page already draws. There is no API to replace text or an image, add a redaction,
-or change a page's media box or its size. Page content and page geometry that survive an edit are copied
-verbatim.
+(Chapter 14). It can also record a page of another document over or under a page — a watermark, a
+letterhead, or a stationery template per page range with a default (Chapter 14) — add, edit and remove
+annotations (Chapter 18), and create, fill, reset and flatten form fields (Chapter 19) — structures
+stored beside a page rather than inside it. What it cannot do *in this release* is change what a page
+already draws. There is no API to replace text or an image, add a redaction, or change a page's media box
+or its size. Page content and page geometry that survive an edit are copied verbatim.
 
 Signing and archival output are separate surfaces that change the file rather than its assembly: a
 signature appends one revision to the bytes it is given (Chapter 23), and the archival writer states the

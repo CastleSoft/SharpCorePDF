@@ -6,7 +6,7 @@ about five minutes.
 ## Install the package
 
 ```bash
-dotnet add package SharpCorePDF --version 1.5.0
+dotnet add package SharpCorePDF --version 1.7.0
 ```
 
 One package is enough. `SharpCorePDF` is a meta-package that brings the domain model, the application
@@ -35,7 +35,7 @@ it; the package selects the matching assembly.
 ```bash
 dotnet new console -n MergeDemo
 cd MergeDemo
-dotnet add package SharpCorePDF --version 1.5.0
+dotnet add package SharpCorePDF --version 1.7.0
 ```
 
 Put two or more PDFs beside the project, or change the paths below. The example uses `cover.pdf`,
@@ -205,7 +205,7 @@ have, which is why the competitive numbers in
 library's own encoding, CMap and glyph tables rather than on ICU, and its standard fonts are measured from
 a table in the assembly rather than from the machine's font folder.
 
-## A complete `Program.cs`
+## A complete Program.cs
 
 The pieces above, assembled and made a little more careful: it validates the plan before doing any
 work, prints warnings, and returns a non-zero exit code if the merge fails.

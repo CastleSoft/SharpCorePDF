@@ -954,15 +954,13 @@ public sealed record PdfEditPlan
     /// <returns><see langword="true"/> when a template is translucent or blended.</returns>
     private static bool UsesTransparency(PdfStationery stationery)
     {
-        foreach (var assignment in stationery.Assignments)
+        if (stationery.Assignments.Any(
+                assignment => assignment.Options is null || StatesTransparency(assignment.Options)))
         {
-            if (assignment.Options is null || StatesTransparency(assignment.Options))
-            {
-                return true;
-            }
+            return true;
         }
 
-        return stationery.Default?.Options is null || StatesTransparency(stationery.Default.Options);
+        return stationery.Default is not { Options: { } fallback } || StatesTransparency(fallback);
     }
 
     /// <summary>Determines whether one set of overlay options states a transparency.</summary>

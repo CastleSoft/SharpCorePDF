@@ -6,19 +6,19 @@ long-form reference for the API.
 
 ## The manual
 
-- **[Read or download the manual as a PDF](SharpCorePDF-Manual-1.5.0.pdf)** — 121 pages, A4, with a
+- **[Read or download the manual as a PDF](SharpCorePDF-Manual-1.7.0.pdf)** — 124 pages, A4, with a
   linked contents page and PDF bookmarks.
 - **Read the chapters as Markdown** in [`manual/src`](manual/src). Each file is one chapter, and the
-  file-name order is the chapter order. This edition describes `1.5.0`. Chapters 16 to 19 were written
+  file-name order is the chapter order. This edition describes `1.7.0`. Chapters 16 to 19 were written
   while `1.1.0` was the package on the feed, and their heads used to say which part of their surface it
   already carried — the annotation writer and the form model shipped there, while the form writer, the
   text layouter and the JPEG, BMP and GIF readers are what `1.2.0` added. They now describe the surface as
-  it stands. The [`1.4.0`](SharpCorePDF-Manual-1.4.0.pdf), [`1.3.0`](SharpCorePDF-Manual-1.3.0.pdf),
-  [`1.2.0`](SharpCorePDF-Manual-1.2.0.pdf) and [`1.1.0`](SharpCorePDF-Manual-1.1.0.pdf) editions stay
-  beside this one as the record of what those releases shipped, and the chapter numbers are kept so that a
-  cross-reference survives both. **Chapter 26 is newer than the PDF beside it**: it documents the font
-  inspector added after the `1.5.0` edition was printed, so the Markdown is one chapter ahead of the
-  downloadable file until the next edition is built, which is a release step
+  it stands. The [`1.5.0`](SharpCorePDF-Manual-1.5.0.pdf), [`1.4.0`](SharpCorePDF-Manual-1.4.0.pdf),
+  [`1.3.0`](SharpCorePDF-Manual-1.3.0.pdf), [`1.2.0`](SharpCorePDF-Manual-1.2.0.pdf) and
+  [`1.1.0`](SharpCorePDF-Manual-1.1.0.pdf) editions stay beside this one as the record of what those
+  releases shipped, and the chapter numbers are kept so that a cross-reference survives both. The PDF and
+  the Markdown are in step: this edition includes Chapter 26 (fonts) and the stationery section in Chapter
+  14, and it is rebuilt before a release with
   (`dotnet run --project .\tools\SharpCorePDF.Manual`).
 
 | Chapter | What it covers |
@@ -37,7 +37,7 @@ long-form reference for the API.
 | [11. Architecture](manual/src/11-architecture.md) | The layers, the life of a merge, immutability, the memory model, extension points and concurrency. |
 | [12. Authoring a Page](manual/src/12-authoring.md) | Writing a page from nothing: coordinates, standard and embedded fonts, PNG, JPEG, BMP and GIF images, determinism, and the boundary of the feature. |
 | [13. Cookbook](manual/src/13-cookbook.md) | Complete recipes for folder merges, password prompts, extraction, encryption, uploads, logging, batching, preflight gates and cover pages. |
-| [14. Editing an Existing Document](manual/src/14-editing.md) | Rotating, deleting, moving and duplicating pages, ordering rules, metadata overrides, warnings, reproducible output and what an edit cannot change. |
+| [14. Editing an Existing Document](manual/src/14-editing.md) | Rotating, deleting, moving and duplicating pages, over/under layers and the stationery plan, ordering rules, metadata overrides, warnings, reproducible output and what an edit cannot change. |
 | [15. Drawing](manual/src/15-drawing.md) | Coordinates and the rectangle names, lines, rectangles, ellipses, paths and fill rules, paint and stroke style in a device or a named colour space, dashes, clipping, transforms, the saved graphics state, and what the surface deliberately does not do. |
 | [16. Text Layout](manual/src/16-text-layout.md) | Measuring a line, the metrics a face reports, wrapping a paragraph into a column, alignment, justification and overflow, drawing the result, and what a layout deliberately does not do. |
 | [17. Image Formats](manual/src/17-image-formats.md) | What is read out of a PNG, a JPEG, a BMP and a GIF, the colour profile a PNG states, natural size and stretching, refusals by name, and what the surface deliberately does not do. |
