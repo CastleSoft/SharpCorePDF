@@ -18,6 +18,20 @@ public sealed class PdfJpegFilterTests
     private static readonly byte[] CmykExpected = File.ReadAllBytes(Fixture("jpeg-cmyk-expected.bin"));
     private static readonly byte[] Restart = File.ReadAllBytes(Fixture("jpeg-restart.jpg"));
     private static readonly byte[] RestartExpected = File.ReadAllBytes(Fixture("jpeg-restart-expected.bin"));
+    private static readonly byte[] Progressive = File.ReadAllBytes(Fixture("jpeg-progressive.jpg"));
+    private static readonly byte[] ProgressiveExpected = File.ReadAllBytes(Fixture("jpeg-progressive-expected.bin"));
+    private static readonly byte[] Progressive420 = File.ReadAllBytes(Fixture("jpeg-progressive-420.jpg"));
+    private static readonly byte[] Progressive420Expected = File.ReadAllBytes(Fixture("jpeg-progressive-420-expected.bin"));
+    private static readonly byte[] ProgressiveGray = File.ReadAllBytes(Fixture("jpeg-progressive-gray.jpg"));
+    private static readonly byte[] ProgressiveGrayExpected = File.ReadAllBytes(Fixture("jpeg-progressive-gray-expected.bin"));
+    private static readonly byte[] ProgressiveCmyk = File.ReadAllBytes(Fixture("jpeg-progressive-cmyk.jpg"));
+    private static readonly byte[] ProgressiveCmykExpected = File.ReadAllBytes(Fixture("jpeg-progressive-cmyk-expected.bin"));
+    private static readonly byte[] ProgressiveWide = File.ReadAllBytes(Fixture("jpeg-progressive-wide.jpg"));
+    private static readonly byte[] ProgressiveWideExpected = File.ReadAllBytes(Fixture("jpeg-progressive-wide-expected.bin"));
+    private static readonly byte[] ProgressiveSparse = File.ReadAllBytes(Fixture("jpeg-progressive-sparse.jpg"));
+    private static readonly byte[] ProgressiveSparseExpected = File.ReadAllBytes(Fixture("jpeg-progressive-sparse-expected.bin"));
+    private static readonly byte[] ProgressiveRestart = File.ReadAllBytes(Fixture("jpeg-progressive-restart.jpg"));
+    private static readonly byte[] ProgressiveRestartExpected = File.ReadAllBytes(Fixture("jpeg-progressive-restart-expected.bin"));
 
     private static string Fixture(string name) => Path.Combine(TestAssets.Folder, "jpeg", name);
 
@@ -92,6 +106,110 @@ public sealed class PdfJpegFilterTests
         Assert.Equal(32, width);
         Assert.Equal(32, height);
         Assert.InRange(MaxDifference(pixels!, RestartExpected), 0, 2);
+    }
+
+    /// <summary>A progressive JPEG states its coefficients across several scans and refines them.</summary>
+    [Fact]
+    public void Decodes_a_progressive_jpeg_within_two_levels()
+    {
+        Assert.True(JpegDecoder.TryDecode(Progressive, 1 << 20, out var pixels, out var format, out var width, out var height));
+
+        Assert.Equal("Rgb24", format);
+        Assert.Equal(32, width);
+        Assert.Equal(32, height);
+        Assert.InRange(MaxDifference(pixels!, ProgressiveExpected), 0, 2);
+    }
+
+    /// <summary>A progressive 4:2:0 JPEG interleaves the DC scan but not the chroma AC scans.</summary>
+    [Fact]
+    public void Decodes_a_subsampled_progressive_jpeg_within_two_levels()
+    {
+        Assert.True(JpegDecoder.TryDecode(Progressive420, 1 << 20, out var pixels, out var format, out var width, out var height));
+
+        Assert.Equal("Rgb24", format);
+        Assert.Equal(32, width);
+        Assert.Equal(32, height);
+        Assert.InRange(MaxDifference(pixels!, Progressive420Expected), 0, 2);
+    }
+
+    /// <summary>A single-component progressive JPEG refines one plane.</summary>
+    [Fact]
+    public void Decodes_a_grayscale_progressive_jpeg_within_two_levels()
+    {
+        Assert.True(JpegDecoder.TryDecode(ProgressiveGray, 1 << 20, out var pixels, out var format, out var width, out var height));
+
+        Assert.Equal("Gray8", format);
+        Assert.Equal(32, width);
+        Assert.Equal(32, height);
+        Assert.InRange(MaxDifference(pixels!, ProgressiveGrayExpected), 0, 2);
+    }
+
+    /// <summary>Four components travel through the progressive scans and leave as inverted CMYK.</summary>
+    [Fact]
+    public void Decodes_a_progressive_cmyk_jpeg_to_four_components()
+    {
+        Assert.True(JpegDecoder.TryDecode(ProgressiveCmyk, 1 << 20, out var pixels, out var format, out var width, out var height));
+
+        var expected = ProgressiveCmykExpected.Select(value => (byte)(255 - value)).ToArray();
+
+        Assert.Equal("Cmyk32", format);
+        Assert.Equal(32, width);
+        Assert.Equal(32, height);
+        Assert.InRange(MaxDifference(pixels!, expected), 0, 2);
+    }
+
+    /// <summary>A non-square image keeps the column and row counts apart in both grids.</summary>
+    [Fact]
+    public void Decodes_a_non_square_progressive_jpeg_within_two_levels()
+    {
+        Assert.True(JpegDecoder.TryDecode(ProgressiveWide, 1 << 20, out var pixels, out var format, out var width, out var height));
+
+        Assert.Equal("Rgb24", format);
+        Assert.Equal(32, width);
+        Assert.Equal(16, height);
+        Assert.InRange(MaxDifference(pixels!, ProgressiveWideExpected), 0, 2);
+    }
+
+    /// <summary>Flat areas produce EOB runs and zero runs an AC scan has to skip.</summary>
+    [Fact]
+    public void Decodes_a_sparse_progressive_jpeg_within_two_levels()
+    {
+        Assert.True(JpegDecoder.TryDecode(ProgressiveSparse, 1 << 20, out var pixels, out var format, out var width, out var height));
+
+        Assert.Equal("Rgb24", format);
+        Assert.Equal(32, width);
+        Assert.Equal(32, height);
+        Assert.InRange(MaxDifference(pixels!, ProgressiveSparseExpected), 0, 2);
+    }
+
+    /// <summary>A restart interval inside a progressive scan resets the predictors and the EOB run.</summary>
+    [Fact]
+    public void Decodes_a_progressive_jpeg_with_restart_markers()
+    {
+        Assert.True(JpegDecoder.TryDecode(ProgressiveRestart, 1 << 20, out var pixels, out var format, out var width, out var height));
+
+        Assert.Equal("Rgb24", format);
+        Assert.Equal(32, width);
+        Assert.Equal(32, height);
+        Assert.InRange(MaxDifference(pixels!, ProgressiveRestartExpected), 0, 2);
+    }
+
+    /// <summary>A progressive stream that stops inside a scan is refused rather than decoded as far as it got.</summary>
+    [Theory]
+    [InlineData(50)]
+    [InlineData(250)]
+    [InlineData(320)]
+    [InlineData(390)]
+    [InlineData(450)]
+    [InlineData(560)]
+    [InlineData(620)]
+    [InlineData(660)]
+    [InlineData(700)]
+    public void Refuses_a_truncated_progressive_jpeg(int length)
+    {
+        var truncated = Progressive.AsSpan(0, length).ToArray();
+
+        Assert.False(JpegDecoder.TryDecode(truncated, 1 << 20, out _, out _, out _, out _));
     }
 
     /// <summary>A pixel buffer above the budget is measured and nothing is kept.</summary>

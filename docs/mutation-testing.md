@@ -899,6 +899,64 @@ The survivors are the **variants the two fixtures do not carry**, not statements
   in part.
 
 Those tests are now in — `jpeg-420.jpg`, `jpeg-cmyk.jpg`, `jpeg-restart.jpg` and a truncated stream — and
-the score above predates them. The fancy upsampling that matches Pillow at every edge, and the progressive
-variant, are the ADR's next slice.
+the score above predates them. The fancy upsampling that matches Pillow at every edge followed, and the
+progressive variant's reading is below.
+
+## DCTDecode — progressive (SOF2) (2026-11-15)
+
+Scoped run over `Pdf/JpegDecoder.cs` after the progressive scans landed. The command is the 5.0.0
+project-mode form with a copy of `stryker-config.json` that restores the `test-projects` entry, because
+5.1.0 in this environment ignores the scope (the note at the end of this section has the evidence):
+
+```powershell
+"%TEMP%\stryker-tools\dotnet-stryker.exe" --config-file stryker-jpeg-config.json `
+  --project src\SharpCorePDF.Infrastructure\SharpCorePDF.Infrastructure.csproj `
+  --mutate "**/JpegDecoder.cs" --output artifacts\mutation\jpeg-progressive
+```
+
+20,004 mutants are created for the solution and the filter leaves **839** for the file (710 killed, 127
+survived, 2 timeouts). The report is per file, so the whole decoder is read, not only the new region:
+
+| File | Score | Killed | Survived | No coverage | Mutants |
+| --- | --- | --- | --- | --- | --- |
+| `Pdf/JpegDecoder.cs` (baseline, 2026-11-15) | 61.65% | 351 | 114 | 105 | 671 |
+| `Pdf/JpegDecoder.cs` (progressive, before the coverage fixtures) | 70.23% | 650 (+1 timeout) | 146 | 130 | 1122 |
+| `Pdf/JpegDecoder.cs` (progressive, after them) | **76.81%** | 710 (+2 timeouts) | 127 | 88 | 1122 |
+
+The coverage fixtures the first reading asked for — the restart interval, the sparse image, the CMYK file
+and the non-square grid — and the truncated-stream theory moved the new region (line 520 onwards) from
+**72.0% to 82.5%**: 471 killed, 46 survived, 54 without coverage, 71 compile errors and 72 ignored. What
+remains is the boundary and error end of the decoder rather than a scan that is not decoded:
+
+- **The DC size and the end-of-band boundaries** (L689, L700, L953, L960, L975, L998): a valid stream
+  whose DC difference needs eleven bits, or whose last coefficient sits exactly on `Se`, is the missing
+  variant. The fixtures' DC differences are small and their bands end before the last coefficient.
+- **The DC refinement at Al = 0** (L719): `|=` and `^=` agree while the bit is clear and `1 >> 0` is `1`,
+  so the fixture cannot tell them apart. A stream that refines the DC at `Ah = 2, Al = 1` does.
+- **The YCCK transform** (L1093–L1115): `jpeg-progressive-cmyk.jpg` is a plain CMYK file (Adobe transform
+  0); the YCCK branch (transform 2) has no fixture. The baseline record's CMYK note has the same gap.
+- **The upsampling boundaries** (L1145–L1180): the 4:2:0 fixtures take the H = V = 2 path, so a 4:2:2
+  image or an odd width would exercise `horizontal == maxH`/`vertical == maxV` and the edge column. The
+  `x / horizontal` arithmetic survives because the fixtures' chroma is a whole multiple of the luma.
+- **The null-table and budget boundaries** (L946, L1055): a stream naming a table it never defined, and an
+  image exactly at the byte budget.
+- **The bit reader's marker branches** (L1264–L1327): the truncation theory reaches some of them; a
+  stuffed `FF 00` or a marker inside entropy data reaches the rest. The `symbol >>> 4` and `>>> 8`
+  mutations are equivalent — a symbol comes from a byte and is never negative.
+- **The baseline marker and segment edge cases** (L82–L248) are unchanged from the baseline reading.
+
+None of the survivors is a statement to remove: each is a variant or a boundary the fixtures do not state,
+and they are recorded rather than papered over. The two conventions the progressive decoder had to get
+right — the sign bit before the correction bits, and 1 meaning positive — are killed by the progressive
+fixtures, which is why they are written down in ADR-005.
+
+**Harness note (5.1.0).** On this workstation, `dotnet stryker` 5.1.0 in solution context mutates the whole
+tree however the scope is stated: the `mutate` entry in `stryker-config.json`, `--mutate` and `--since:main`
+all leave 23,042 mutants, and the documented 5.1.0 example (`--mutate "**/PdfDiagnoserService.cs"`, 13
+mutants in the 5.1.0 record above) reads the whole tree here. Project mode is refused with "Test projects
+cannot be specified when running Stryker in solution context". The reading above is therefore taken with a
+local 5.0.0 — `dotnet tool install dotnet-stryker --version 5.0.0 --tool-path %TEMP%\stryker-tools` — run
+from the repository root with `--project` and the command-line `--mutate`, which applies the filter (839 of
+20,004). The pin, the config and the workflow are unchanged; the version is stated because 5.1.0 rejected
+one mutant at compile time in the earlier comparison, so a 5.1.0 re-run may move a point either way.
 
