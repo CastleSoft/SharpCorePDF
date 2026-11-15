@@ -656,7 +656,7 @@ change has to clear, and what a merge buys you in rights. Participation falls un
 suspected vulnerability goes through
 [`SECURITY.md`](https://github.com/MPCoreDeveloper/SharpCorePDF/blob/main/SECURITY.md) rather than through
 the issue tracker — a public issue describing a crash in a PDF parser is a working exploit by the time it
-is indexed.
+is indexed. Everyone who has improved the project, with code, reports or ideas, is acknowledged in [`CONTRIBUTORS.md`](CONTRIBUTORS.md).
 
 ## Feedback
 
@@ -664,10 +664,5 @@ Bugs, questions and feature requests go to the
 [issue tracker](https://github.com/MPCoreDeveloper/SharpCorePDF/issues). The most valuable report of
 all is a merge that produced a file something else cannot open: attach the sources if you can, and the
 warning list the merge returned, and it becomes a test.
-
-## Contributors
-
-- [CastleSoft](https://github.com/CastleSoft)
-- [Ewart Nijburg](https://github.com/enijburg)
 
 
