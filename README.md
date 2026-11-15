@@ -665,4 +665,9 @@ Bugs, questions and feature requests go to the
 all is a merge that produced a file something else cannot open: attach the sources if you can, and the
 warning list the merge returned, and it becomes a test.
 
+## Contributors
+
+- [CastleSoft](https://github.com/CastleSoft)
+- [Ewart Nijburg](https://github.com/enijburg)
+
 
