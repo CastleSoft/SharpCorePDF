@@ -74,12 +74,17 @@ against an empty feed.
 - **An incremental update keeps the permanent identifier.** The first element of `/ID` is the source's in
   every revision, as ISO 32000-1 §14.4 requires; only the second element is new.
 
-### Known defects, found by the new checks and not yet fixed
-
-Each is reproduced, pinned by a skipped test or a strict `--known-defect` flag that fails the run once the
-defect is fixed, and listed in [`docs/validation.md`](docs/validation.md#known-defects).
-
-- A merge copies a page that states no `/MediaBox` without one.
+- **A merge writes a media box for a page that states none.** Every page of a PDF needs one; a source page
+  with none, and none to inherit, was copied without it, and each reader assumed its own size. It is now
+  written with the A4 box the inspection already describes it with, and `PageSizeAssumed` says so.
+- **Copied real numbers keep their value.** A merge or an edit rewrote every real it copied to five decimals —
+  a Type 3 font matrix of `0.000012` became `0.00001`, seventeen percent off, and `0.000004` became `0`. A real
+  read from a document is now written back from its own text. A real too large for the formatter's buffer no
+  longer fails the write of the whole document (found by the `document` fuzz target in its first run).
+- **The image copy route refuses damaged Flate data with `PdfSourceFormatException`** instead of letting the
+  decompressor's `InvalidDataException` reach the caller (found by the `flate` fuzz target).
+- **Annotations satisfy the Arlington model.** A free text annotation states the `/DA` ISO 32000-1 requires,
+  and every annotation appearance states its `/Resources` (found by the Arlington check in its first run).
 
 - **Run-length images are decoded.** `RunLengthDecode` joins Flate, LZW and the two ASCII filters: a
   bilevel or scan-style image that declares it now yields its samples — and `Gray8`, `Rgb24` or `Cmyk32`

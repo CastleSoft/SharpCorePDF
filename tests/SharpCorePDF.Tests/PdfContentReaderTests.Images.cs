@@ -14,6 +14,36 @@ namespace SharpCorePDF.Tests;
 /// </summary>
 public sealed partial class PdfContentReaderTests
 {
+    /// <summary>
+    /// The copy route of an image whose Flate data is damaged refuses it with the contract's exception, whether a
+    /// predictor is declared or not: the decompressor's own exception used to reach the caller as if the library
+    /// had failed.
+    /// </summary>
+    /// <param name="parameters">The decode parameters the image declares.</param>
+    [Theory]
+    [InlineData("/DecodeParms << /Predictor 12 /Colors 1 /BitsPerComponent 8 /Columns 4 >>")]
+    [InlineData("")]
+    public async Task Refuses_to_copy_an_image_whose_flate_data_is_damaged(string parameters)
+    {
+        var builder = new PdfBuilder();
+        var catalog = builder.Reserve();
+        var pages = builder.Reserve();
+        var damaged = new byte[] { 0x78, 0x9C, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05 };
+
+        builder.Add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>");
+        builder.AddStream(string.Empty, "q 50 0 0 50 0 0 cm /Im0 Do Q"u8.ToArray());
+        builder.AddStream($"/Type /XObject /Subtype /Image /Width 4 /Height 4 /BitsPerComponent 8 /ColorSpace /DeviceGray /Filter /FlateDecode {parameters}", damaged);
+        builder.Set(catalog, "<< /Type /Catalog /Pages 2 0 R >>");
+        builder.Set(pages, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+
+        var source = Source(builder.Build(catalog));
+        var reader = Reader();
+        var image = Assert.Single((await reader.ReadImagesAsync(source, PageRange.All, cancellationToken: Token)).Items);
+
+        await Assert.ThrowsAsync<SharpCorePDF.Domain.Exceptions.PdfSourceFormatException>(
+            () => reader.CopyImageDataAsync(source, image, Stream.Null, cancellationToken: Token));
+    }
+
     /// <summary>One object drawn twice and shared by two pages is one entry carrying both pages.</summary>
     [Fact]
     public async Task Returns_each_image_once_with_every_page_that_draws_it()

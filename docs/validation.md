@@ -83,7 +83,6 @@ fix. This is the list on 2026-11-16, every entry reproduced, not inferred:
 
 | Defect | Found by | Evidence |
 | --- | --- | --- |
-| A merge copies a page that states no `/MediaBox` (and inherits none) without one, so the result breaks the rule that every page has a media box; qpdf repairs it by assuming Letter | #2 | `validate-pdf.py` on `inspected.pdf` and `with-warnings.pdf` (both merge a page of `NamedDests.pdf`) |
 
 Fixed since the list was first drawn up, each with the test that fails without its fix:
 
@@ -99,6 +98,10 @@ Fixed since the list was first drawn up, each with the test that fails without i
 | `PdfDate.TryParse` threw for a time-zone offset beyond 14 hours | an offset no time zone has is read as no offset | `PdfSerializationTests.Reads_an_offset_no_time_zone_has_as_no_offset` |
 | An incremental update wrote a new identifier into both elements of `/ID` | the first element of the source's `/ID` is kept; only the second is new | `PdfIncrementalInvariantTests.Keeps_the_first_identifier_element_across_an_incremental_update` |
 | `UseIncrementalUpdate` appended a renumbered copy of the whole document, rewriting the signature dictionary after signing | the edited document's objects keep their numbers, and an object written exactly as the source states it is left out: rotating one page of a signed document appends 716 bytes and three objects instead of 20,969 bytes and twelve, and pyHanko places the signature at `ENTIRE_REVISION` | `PdfIncrementalInvariantTests.Appends_only_the_objects_an_edit_changes`, `Leaves_the_signature_dictionary_out_of_an_appended_revision` |
+| A merge copied a page that states no `/MediaBox` (and inherits none) without one | the page is written with the A4 box the inspection describes it with, and `PageSizeAssumed` says so | `PdfMergeFidelityTests.Writes_a_media_box_for_a_page_that_has_none` |
+| Reals a merge or an edit copied were re-formatted to five decimals (`0.000012` became `0.00001`), and a real too large for the formatter's buffer failed the write of the whole document — the first crash the `document` fuzz target found | a real read from a document is written from its own text when that text is a well-formed PDF real; other values are formatted at any magnitude | `PdfMergeFidelityTests.Writes_the_reals_it_copies_as_the_source_states_them`, `Writes_a_real_of_any_magnitude_in_the_form_pdf_defines` |
+| The copy route of an image let the decompressor's `InvalidDataException` escape for damaged Flate data — the crash the `flate` fuzz target found | the copy route refuses damaged data with `PdfSourceFormatException`, with or without a predictor | `PdfContentReaderTests.Refuses_to_copy_an_image_whose_flate_data_is_damaged` |
+| A free text annotation was written without the `/DA` ISO 32000-1 requires, and annotation appearances without `/Resources` — both reported by the Arlington check's first run | `/DA` states the font, size and colour the appearance draws with; every appearance states its resources, empty if it needs none | `PdfDocumentEditorTests.States_the_default_appearance_and_resources_of_a_free_text_annotation`, `States_resources_on_an_appearance_that_needs_none` |
 
 ## Corpus readings, 2026-11-16
 

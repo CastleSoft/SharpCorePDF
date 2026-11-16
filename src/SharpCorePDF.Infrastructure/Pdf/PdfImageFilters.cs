@@ -154,14 +154,27 @@ internal static class PdfImageFilters
             // reach, because the two tests name the same predictor values.
             using var predictor = PdfFilters.CreatePredictorDecoder(decodeParameters, sourceName);
 
-            if (predictor is not null)
+            // A damaged stream is the document's fault, not the caller's, and the contract names it with a
+            // PdfSourceFormatException: the decompressor's own exception would reach the caller as a failure
+            // of the library. What was written before the damage stays written; the caller learns it is
+            // incomplete from the exception.
+            try
             {
-                await InflatePredictorToAsync(stream.Raw, predictor, destination, cancellationToken)
-                    .ConfigureAwait(false);
+                if (predictor is not null)
+                {
+                    await InflatePredictorToAsync(stream.Raw, predictor, destination, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                else
+                {
+                    await InflateToAsync(stream.Raw, destination, cancellationToken).ConfigureAwait(false);
+                }
             }
-            else
+            catch (InvalidDataException exception)
             {
-                await InflateToAsync(stream.Raw, destination, cancellationToken).ConfigureAwait(false);
+                throw new PdfSourceFormatException(
+                    sourceName,
+                    $"the Flate data of the payload is damaged and could not be decompressed for copying: {exception.Message}");
             }
 
             return;

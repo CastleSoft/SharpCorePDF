@@ -90,9 +90,7 @@ jobs:
             case "$(basename "$file")" in protected.pdf|encrypted-*) continue ;; esac
             files+=("$file")
           done
-          # Both merge a page of NamedDests.pdf, which states no /MediaBox; the merge copies it without one,
-          # so the result breaks the rule that every page has a media box, and qpdf assumes Letter.
-          python docs/tools/validate-pdf.py             --known-defect inspected.pdf --known-defect with-warnings.pdf             "${files[@]}"
+          python docs/tools/validate-pdf.py "${files[@]}"
 
       - name: Text round trip
         run: python docs/tools/validate-text.py "$RUNNER_TEMP/corpus"

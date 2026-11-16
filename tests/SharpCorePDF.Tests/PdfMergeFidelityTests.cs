@@ -1,0 +1,113 @@
+using System.Text;
+using SharpCorePDF.Application.Extensions;
+using SharpCorePDF.Application.Services;
+using SharpCorePDF.Domain.Aggregates;
+using SharpCorePDF.Domain.Entities;
+using SharpCorePDF.Domain.ValueObjects;
+using SharpCorePDF.Infrastructure;
+using SharpCorePDF.Infrastructure.Pdf;
+using SharpCorePDF.Infrastructure.Sources;
+
+namespace SharpCorePDF.Tests;
+
+/// <summary>
+/// Tests of what a merge writes for values it does not change: the numbers a source states come back as the
+/// source states them, and a page the source leaves without a size comes back with the size the library
+/// describes it with.
+/// </summary>
+public sealed class PdfMergeFidelityTests
+{
+    private static CancellationToken Token => TestContext.Current.CancellationToken;
+
+    /// <summary>
+    /// A real a merge copies is written from the text the source used, not from a value formatted to five
+    /// decimals: a Type 3 font matrix of <c>0.000012</c> used to come out as <c>0.00001</c>, seventeen percent
+    /// off, and <c>0.000004</c> as <c>0</c>.
+    /// </summary>
+    [Fact]
+    public async Task Writes_the_reals_it_copies_as_the_source_states_them()
+    {
+        var merged = await MergeAsync(Page("/Scale [0.000012 -0.00048828125 0.000004 12.5 +.5]"));
+        var text = Encoding.Latin1.GetString(merged);
+
+        Assert.Contains("[0.000012 -0.00048828125 0.000004 12.5 +.5]", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A real outside the form PDF defines — here with an exponent, which PDF does not have — is written in the
+    /// form PDF defines, whatever its magnitude, instead of failing the write of the whole document.
+    /// </summary>
+    [Fact]
+    public async Task Writes_a_real_of_any_magnitude_in_the_form_pdf_defines()
+    {
+        var merged = await MergeAsync(Page("/Huge 1e300 /Small 2.5e-3"));
+        var text = Encoding.Latin1.GetString(merged);
+
+        Assert.Contains("/Huge 1" + new string('0', 300), text, StringComparison.Ordinal);
+        Assert.Contains("/Small 0.0025", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A page that states no media box and inherits none is written with the A4 box the inspection describes it
+    /// with, because every page of a PDF needs one; the merge says so with <see cref="PdfWarningKind.PageSizeAssumed"/>.
+    /// </summary>
+    [Fact]
+    public async Task Writes_a_media_box_for_a_page_that_has_none()
+    {
+        var builder = new PdfBuilder();
+        var catalog = builder.Reserve();
+        var pages = builder.Reserve();
+
+        builder.Add("<< /Type /Page /Parent 2 0 R >>");
+        builder.Set(catalog, "<< /Type /Catalog /Pages 2 0 R >>");
+        builder.Set(pages, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+
+        using var destination = new MemoryStream();
+        var result = await Merger().MergeAsync(
+            MergePlan.Create().AddSource(PdfSource.Create(new PdfByteArraySource(builder.Build(catalog), "sizeless.pdf"))),
+            destination,
+            Token);
+
+        var reader = new PdfFileReader(destination.ToArray(), "merged.pdf", PdfEngineOptions.Default);
+        var box = Assert.IsType<PdfArray>(reader.Pages[0].Dictionary.Get("MediaBox"));
+
+        Assert.Equal(4, box.Count);
+        Assert.Equal(PdfPageSize.A4.WidthPoints, ((PdfReal)box.Items[2]).Value, 3);
+        Assert.Equal(PdfPageSize.A4.HeightPoints, ((PdfReal)box.Items[3]).Value, 3);
+        Assert.Contains(result.Warnings, warning => warning.Kind == PdfWarningKind.PageSizeAssumed);
+    }
+
+    /// <summary>A page that states its own media box keeps it, and no size is assumed for it.</summary>
+    [Fact]
+    public async Task Keeps_the_media_box_a_page_states()
+    {
+        using var destination = new MemoryStream();
+        var result = await Merger().MergeAsync(
+            MergePlan.Create().AddSource(PdfSource.Create(new PdfByteArraySource(Page(string.Empty), "sized.pdf"))),
+            destination,
+            Token);
+
+        Assert.Contains("/MediaBox [0 0 200 300]", Encoding.Latin1.GetString(destination.ToArray()), StringComparison.Ordinal);
+        Assert.DoesNotContain(result.Warnings, warning => warning.Kind == PdfWarningKind.PageSizeAssumed);
+    }
+
+    private static PdfMergerService Merger() => new(new PdfDocumentReader(), new PdfMergeEngine());
+
+    private static byte[] Page(string entries)
+    {
+        var builder = new PdfBuilder();
+        var catalog = builder.Reserve();
+        var pages = builder.Reserve();
+
+        builder.Add($"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 300] {entries} >>");
+        builder.Set(catalog, "<< /Type /Catalog /Pages 2 0 R >>");
+        builder.Set(pages, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+
+        return builder.Build(catalog);
+    }
+
+    private static Task<byte[]> MergeAsync(byte[] document) =>
+        Merger().MergeToBytesAsync(
+            MergePlan.Create().AddSource(PdfSource.Create(new PdfByteArraySource(document, "source.pdf"))),
+            Token);
+}

@@ -71,10 +71,13 @@ def read_report(payload: bytes) -> tuple[bool, list[str]]:
 
         return compliant.group(1) == "true", re.findall(r'"clause"\s*:\s*"([^"]+)"', text)
 
-    reports = [element for element in root.iter() if element.tag.endswith("validationReport")]
+    # The Arlington service names its verdict element arlingtonReport (veraPDF's PDF/A reports name theirs
+    # validationReport); both carry isCompliant, which is what the verdict is read from.
+    reports = [element for element in root.iter()
+               if element.tag.endswith(("arlingtonReport", "validationReport")) and element.get("isCompliant")]
 
     if not reports:
-        raise ValueError("the XML report holds no validationReport element")
+        raise ValueError("the XML report holds no arlingtonReport or validationReport element")
 
     failed = []
 

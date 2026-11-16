@@ -39,7 +39,11 @@ internal static partial class PdfDocumentInspection
         return pages;
     }
 
-    private static PdfPageSize? TryReadPageSize(PdfFileReader reader, SourcePage page)
+    /// <summary>Reads the size a page's own or inherited <c>/MediaBox</c> states.</summary>
+    /// <param name="reader">The document.</param>
+    /// <param name="page">The page.</param>
+    /// <returns>The size, or <see langword="null"/> when the page has no readable media box.</returns>
+    internal static PdfPageSize? TryReadPageSize(PdfFileReader reader, SourcePage page)
     {
         var box = reader.ResolveArray(page.Dictionary.Get("MediaBox"))
             ?? reader.ResolveArray(page.Inherited.Get("MediaBox"));
