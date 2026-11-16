@@ -733,6 +733,7 @@ public sealed partial class PdfEditEngine
     /// <param name="security">The encryption of the result, or <see langword="null"/> when it is written in the clear.</param>
     /// <param name="previousXref">The cross-reference section this revision chains to, or <see langword="null"/> for a complete document.</param>
     /// <param name="permanentIdentifier">The first element of the source's <c>ID</c>, kept by an appended revision, or <see langword="null"/>.</param>
+    /// <param name="asStream">Whether the section is a cross-reference stream, because the document the revision is appended to uses them.</param>
     private static void WriteTrailer(
         PdfWriter writer,
         int catalogNumber,
@@ -740,7 +741,8 @@ public sealed partial class PdfEditEngine
         PdfString identifier,
         PdfSecurityWriter? security,
         long? previousXref,
-        PdfString? permanentIdentifier = null)
+        PdfString? permanentIdentifier = null,
+        bool asStream = false)
     {
         var trailer = new PdfDictionary();
         trailer.Set("Root", new PdfReference(catalogNumber, 0));
@@ -767,7 +769,7 @@ public sealed partial class PdfEditEngine
             trailer.Set("Encrypt", new PdfReference(writer.WriteEncryptionDictionary(security), 0));
         }
 
-        writer.Complete(trailer);
+        writer.Complete(trailer, asStream);
     }
 
     /// <summary>Builds the identifier written twice in the trailer of the result.</summary>

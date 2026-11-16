@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using SharpCorePDF.Domain.Exceptions;
 using SharpCorePDF.Domain.ReadModels;
@@ -18,6 +19,108 @@ namespace SharpCorePDF.Tests;
 /// </remarks>
 public sealed class PdfReaderRecoveryTests
 {
+    /// <summary>
+    /// A file whose bytes moved after its table was written — here three bytes inserted behind the header, the
+    /// way a converted line ending or a prepended byte order mark moves them — has a table that parses and
+    /// offsets that land in the middle of objects. The table is rebuilt instead of the objects going missing.
+    /// </summary>
+    [Fact]
+    public void Rebuilds_a_table_whose_offsets_no_longer_point_at_their_objects()
+    {
+        var original = TwoPageDocument();
+        var header = "%PDF-1.7\n"u8.Length;
+        var shifted = original[..header].Concat("   "u8.ToArray()).Concat(original[header..]).ToArray();
+
+        // The startxref is corrected, so only the entries of the table are wrong: the case reconstruction
+        // used to skip, because the table read cleanly and named a catalog.
+        var text = Encoding.Latin1.GetString(shifted);
+        var keyword = text.LastIndexOf("startxref", StringComparison.Ordinal);
+        var digits = text.IndexOf('\n', keyword) + 1;
+        var end = text.IndexOf('\n', digits);
+        var corrected = (long.Parse(text[digits..end], CultureInfo.InvariantCulture) + 3).ToString(CultureInfo.InvariantCulture);
+        var repaired = Encoding.Latin1.GetBytes(text[..digits] + corrected + text[end..]);
+
+        var reader = new PdfFileReader(repaired, "shifted.pdf", PdfEngineOptions.Default);
+
+        Assert.Equal(2, reader.Pages.Count);
+        Assert.Contains(reader.Warnings, warning => warning.Kind == PdfWarningKind.CrossReferenceRebuilt);
+    }
+
+    /// <summary>
+    /// A PDF 1.5 file whose cross-reference stream is lost keeps its page inside an object stream and its
+    /// catalog reference in the cross-reference stream's dictionary. Rebuilding finds both: the objects an
+    /// object stream holds, and the /Root of the last cross-reference stream.
+    /// </summary>
+    [Fact]
+    public void Rebuilds_a_table_from_object_streams_when_the_cross_reference_stream_is_lost()
+    {
+        var page = "3 0 << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>"u8.ToArray();
+        var packed = PdfBuilder.Compress(page);
+        var output = new MemoryStream();
+        var offsets = new Dictionary<int, long>();
+
+        void Write(string value) => output.Write(Encoding.Latin1.GetBytes(value));
+
+        void Object(int number, string dictionary, byte[]? stream = null)
+        {
+            offsets[number] = output.Position;
+            Write($"{number} 0 obj\n{dictionary}\n");
+
+            if (stream is not null)
+            {
+                Write("stream\n");
+                output.Write(stream);
+                Write("\nendstream\n");
+            }
+
+            Write("endobj\n");
+        }
+
+        Write("%PDF-1.7\n");
+        Object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+        Object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+        Object(5, $"<< /Type /ObjStm /N 1 /First 4 /Filter /FlateDecode /Length {packed.Length} >>", packed);
+
+        // The cross-reference stream is damaged beyond reading: its data is gone, its dictionary survives.
+        Object(6, "<< /Type /XRef /Size 7 /W [1 4 2] /Root 1 0 R /Length 0 >>", []);
+        Write($"startxref\n{offsets[6] + 7}\n%%EOF\n");
+
+        var reader = new PdfFileReader(output.ToArray(), "lost-xref.pdf", PdfEngineOptions.Default);
+
+        Assert.Single(reader.Pages);
+        Assert.Equal("Page", Assert.IsType<PdfDictionary>(reader.Resolve(3)).GetName("Type"));
+        Assert.Contains(reader.Warnings, warning => warning.Kind == PdfWarningKind.CrossReferenceRebuilt);
+    }
+
+    /// <summary>
+    /// A reference names an object by number and generation, and one whose generation is not the one the
+    /// table lists for that number refers to an object that no longer exists, which ISO 32000-1 reads as
+    /// null; the generation used to be ignored, so <c>3 1 R</c> resolved to <c>3 0 obj</c>.
+    /// </summary>
+    [Fact]
+    public void Resolves_a_reference_to_a_generation_the_table_does_not_list_as_null()
+    {
+        var reader = new PdfFileReader(TwoPageDocument(), "generations.pdf", PdfEngineOptions.Default);
+
+        Assert.IsType<PdfDictionary>(reader.Resolve(new PdfReference(3, 0)));
+        Assert.Null(reader.Resolve(new PdfReference(3, 1)));
+        Assert.IsType<PdfDictionary>(reader.Resolve(new PdfReference(3, 0)));
+    }
+
+    private static byte[] TwoPageDocument()
+    {
+        var builder = new PdfBuilder();
+        var catalog = builder.Reserve();
+        var pages = builder.Reserve();
+
+        builder.Add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>");
+        builder.Add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] >>");
+        builder.Set(catalog, "<< /Type /Catalog /Pages 2 0 R >>");
+        builder.Set(pages, "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>");
+
+        return builder.Build(catalog);
+    }
+
     /// <summary>
     /// The bound on a chain of lengths leaves an ordinary indirect length alone, for every stream of a
     /// document and not only the first ones: each stream's data holds an <c>endstream</c> line of its own,
@@ -175,27 +278,29 @@ public sealed class PdfReaderRecoveryTests
             warning => warning.Kind == PdfWarningKind.CrossReferenceRebuilt);
     }
 
-    /// <summary>A document whose catalog lives in an object stream cannot be rebuilt by scanning.</summary>
+    /// <summary>
+    /// A document whose catalog lives in an object stream is rebuilt from the object streams the scan finds and
+    /// the <c>/Root</c> of its cross-reference stream's dictionary, and reads the pages the undamaged file has.
+    /// </summary>
     /// <remarks>
     /// The scanner finds object headers in the bytes of the file, and the catalog of a document that keeps its
-    /// objects in object streams is inside a compressed stream, where no scan can see it. Refusing the
-    /// document is the honest answer; the alternative is a merge that silently contributes nothing.
+    /// objects in object streams is inside a compressed stream, where a scan for headers cannot see it. This
+    /// test used to assert that such a document is refused; reconstruction now looks inside the object streams
+    /// it finds, which is what other readers do.
     /// </remarks>
     [Fact]
-    public async Task Refuses_a_document_whose_catalog_cannot_be_found_by_scanning()
+    public async Task Rebuilds_a_document_whose_catalog_lives_in_an_object_stream()
     {
         var reader = new PdfDocumentReader(PdfEngineOptions.Default);
 
-        using var content = new MemoryStream(PointStartxrefAtTheHeader(TestAssets.Modern));
+        using var intact = new MemoryStream(File.ReadAllBytes(TestAssets.Modern));
+        using var damaged = new MemoryStream(PointStartxrefAtTheHeader(TestAssets.Modern));
 
-        var exception = await Assert.ThrowsAsync<PdfSourceFormatException>(
-            async () => await reader.ReadAsync(
-                "damaged.pdf",
-                content,
-                password: null,
-                TestContext.Current.CancellationToken));
+        var expected = await reader.ReadAsync("intact.pdf", intact, password: null, TestContext.Current.CancellationToken);
+        var rebuilt = await reader.ReadAsync("damaged.pdf", damaged, password: null, TestContext.Current.CancellationToken);
 
-        Assert.Contains("no document catalog", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(expected.PageCount, rebuilt.PageCount);
+        Assert.Contains(rebuilt.Warnings, warning => warning.Kind == PdfWarningKind.CrossReferenceRebuilt);
     }
 
     /// <summary>A file that was cut behind its last object keeps working.</summary>

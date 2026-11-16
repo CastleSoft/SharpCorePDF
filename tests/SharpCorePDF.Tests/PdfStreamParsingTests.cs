@@ -68,6 +68,35 @@ public sealed class PdfStreamParsingTests
     public void Keeps_the_bytes_it_found_when_a_compressed_candidate_does_not_inflate() =>
         Assert.Equal("not compressed", Read("<< /Filter /FlateDecode >>\nstream\nnot compressed\nendstream"));
 
+    /// <summary>
+    /// A compressed stream whose data holds the word <c>endstream</c> is cut at the candidate where the
+    /// compressed data is complete — where its Adler-32 checksum matches — not at the first one that inflates:
+    /// a deflate stream cut short inflates without complaint to the bytes in front of the cut.
+    /// </summary>
+    [Fact]
+    public void Scans_past_a_candidate_whose_compressed_data_is_cut_short()
+    {
+        var content = Encoding.Latin1.GetBytes("BT (before)\nendstream\n(after) Tj ET");
+        using var buffer = new MemoryStream();
+
+        // Stored blocks keep the word readable in the compressed bytes, where a writer that compresses
+        // its content can leave it too.
+        using (var zlib = new System.IO.Compression.ZLibStream(buffer, System.IO.Compression.CompressionLevel.NoCompression, leaveOpen: true))
+        {
+            zlib.Write(content);
+        }
+
+        var bytes = Encoding.Latin1.GetBytes("<< /Filter /FlateDecode >>\nstream\n")
+            .Concat(buffer.ToArray())
+            .Concat(Encoding.Latin1.GetBytes("\nendstream"))
+            .ToArray();
+
+        var parser = new PdfObjectParser(bytes, "damaged.pdf", 0, null, 64);
+        var stream = Assert.IsType<PdfStream>(parser.ParseObject());
+
+        Assert.Equal(content, PdfFilters.Decode(stream, "damaged.pdf"));
+    }
+
     /// <summary>A stream is read behind an indirect object header.</summary>
     [Fact]
     public void Reads_a_stream_behind_an_object_header()

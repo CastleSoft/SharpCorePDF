@@ -3,6 +3,7 @@ using SharpCorePDF.Domain.Exceptions;
 using SharpCorePDF.Domain.Ports;
 using SharpCorePDF.Domain.ValueObjects;
 using SharpCorePDF.Infrastructure;
+using SharpCorePDF.Infrastructure.Pdf;
 
 namespace SharpCorePDF.Tests;
 
@@ -84,6 +85,25 @@ public sealed class PdfDocumentSignerTests
         Assert.Contains(" /Prev ", text, StringComparison.Ordinal);
         Assert.Contains(" /AcroForm ", text, StringComparison.Ordinal);
         Assert.Contains(" /SigFlags 3", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A signature appended to a document whose newest section is a cross-reference stream ends its revision
+    /// in a stream too, and the signature is valid over the whole file; a classic table used to be appended.
+    /// </summary>
+    [Fact]
+    public async Task Signs_a_document_that_uses_cross_reference_streams_with_one()
+    {
+        var source = File.ReadAllBytes(TestAssets.Modern);
+        var signed = await SigningFixtures.SignAsync(source, SigningFixtures.Options(Certificate));
+
+        var reader = new PdfFileReader(signed, "signed.pdf", PdfEngineOptions.Default);
+        var validation = Assert.Single(await SigningFixtures.ValidateAsync(signed));
+
+        Assert.True(reader.CrossReferenceTable.NewestSectionIsStream);
+        Assert.False(reader.CrossReferenceTable.WasReconstructed);
+        Assert.Equal(PdfSignatureIntegrity.Valid, validation.Integrity);
+        Assert.True(validation.Signer.CoversWholeDocument);
     }
 
     /// <summary>

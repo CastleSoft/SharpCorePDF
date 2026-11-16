@@ -157,11 +157,25 @@ internal sealed class PdfWriter
 
     /// <summary>Writes the cross-reference table, trailer and the closing <c>startxref</c>.</summary>
     /// <param name="trailer">The trailer dictionary; its <c>Size</c> entry is corrected here.</param>
-    public void Complete(PdfDictionary trailer)
+    /// <param name="asStream">Whether the section is written as a cross-reference stream, the form a revision appended to a document that uses them takes.</param>
+    public void Complete(PdfDictionary trailer, bool asStream = false)
     {
         ArgumentNullException.ThrowIfNull(trailer);
 
         var startXref = Length;
+
+        if (asStream)
+        {
+            trailer.SetInteger("Size", Math.Max(trailer.GetInteger("Size") ?? 0, lastObjectNumber + 1));
+            PdfCrossReferenceStreamWriter.Write(
+                output,
+                startXref,
+                offsets.Select(entry => (entry.Key, 0, entry.Value)).ToArray(),
+                trailer,
+                freeHead: true);
+            return;
+        }
+
         output.Write("xref\n"u8);
         WriteSubsections();
 

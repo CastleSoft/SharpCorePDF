@@ -38,6 +38,43 @@ internal static partial class PdfFilters
     public static bool TryInflate(ReadOnlyMemory<byte> data, out byte[] result) =>
         TryInflate(data, DefaultMaxDecodedBytes, out result) == InflateOutcome.Inflated;
 
+    /// <summary>
+    /// Determines whether zlib data ends with the Adler-32 checksum of what it inflated to, which only data
+    /// that is complete does: a deflate stream cut short inflates without complaint to the bytes before the
+    /// cut, and the four bytes in front of the cut are then not its checksum.
+    /// </summary>
+    /// <param name="compressed">The zlib data, possibly followed by the end of line a writer put behind it.</param>
+    /// <param name="inflated">The bytes it inflated to.</param>
+    /// <returns><see langword="true"/> when the checksum is found at the end of the data.</returns>
+    internal static bool EndsWithAdler32Of(ReadOnlySpan<byte> compressed, ReadOnlySpan<byte> inflated)
+    {
+        const uint Modulus = 65521;
+
+        uint low = 1;
+        uint high = 0;
+
+        // 5552 bytes is the longest run the two sums can take before they have to be reduced to stay in 32 bits.
+        while (!inflated.IsEmpty)
+        {
+            var run = inflated[..Math.Min(5552, inflated.Length)];
+
+            foreach (var value in run)
+            {
+                low += value;
+                high += low;
+            }
+
+            low %= Modulus;
+            high %= Modulus;
+            inflated = inflated[run.Length..];
+        }
+
+        Span<byte> checksum = [(byte)(high >> 8), (byte)high, (byte)(low >> 8), (byte)low];
+        var trimmed = compressed.TrimEnd("\r\n \t\0"u8);
+
+        return trimmed.EndsWith(checksum);
+    }
+
     /// <summary>Decompresses Flate data under the default limit on its decoded size.</summary>
     /// <param name="data">The compressed bytes.</param>
     /// <param name="sourceName">The name of the source, used in diagnostics.</param>

@@ -85,6 +85,26 @@ against an empty feed.
   decompressor's `InvalidDataException` reach the caller (found by the `flate` fuzz target).
 - **Annotations satisfy the Arlington model.** A free text annotation states the `/DA` ISO 32000-1 requires,
   and every annotation appearance states its `/Resources` (found by the Arlington check in its first run).
+- **A cross-reference table whose offsets moved is rebuilt.** Bytes inserted or removed after a table was
+  written — a converted line ending, a prepended byte order mark — leave a table that parses and offsets that
+  land inside other objects. Reconstruction used to run only when no table or no catalog was found; it now
+  also runs when the catalog's offset, or most of a sample of offsets, does not land on its own object.
+- **Reconstruction looks inside object streams.** A PDF 1.5 file whose cross-reference stream is lost keeps
+  its catalog and pages in object streams, which a scan for object headers cannot see; it was refused with
+  "no document catalog". The objects of every object stream the scan finds are now indexed, and `/Root` is
+  taken from the dictionary of the last cross-reference stream.
+- **Hardening.** AESV2 always uses a sixteen-byte key, as AES-128 requires, so a file that declares a shorter
+  one opens. A predicted row is sized in 64 bits on the whole-buffer path too: declared columns and colours
+  whose product wrapped to zero looped forever, and to a negative number threw `ArgumentOutOfRangeException`.
+  A stream whose length is wrong is cut where its compressed data is complete — where its Adler-32 matches —
+  rather than at the first `endstream` whose bytes inflate, and at most sixteen candidates are inflated. A
+  reference to a generation the table does not list resolves to null, as ISO 32000-1 reads it.
+- **A revision appended to a file that uses cross-reference streams ends in one.** Edits and signatures
+  appended a classic table chained to a stream; they now write the form the document uses.
+- **Copying a listed attachment that embeds nothing writes nothing.** A file specification in the embedded
+  files tree that only names an external file is listed, with a warning and a length of zero; copying it
+  threw `ArgumentException` as if the caller had passed a file of another document (found by the veraPDF
+  corpus run, `isartor-6-1-11-t01-fail-a.pdf`).
 
 - **Run-length images are decoded.** `RunLengthDecode` joins Flate, LZW and the two ASCII filters: a
   bilevel or scan-style image that declares it now yields its samples — and `Gray8`, `Rgb24` or `Cmyk32`

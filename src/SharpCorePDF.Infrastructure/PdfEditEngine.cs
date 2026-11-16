@@ -318,7 +318,8 @@ public sealed partial class PdfEditEngine : IPdfEditEngine
             identifier,
             security,
             revision?.PreviousXref,
-            primary is null ? null : PermanentIdentifier(primary));
+            primary is null ? null : PermanentIdentifier(primary),
+            primary?.CrossReferenceTable.NewestSectionIsStream == true);
 
         Verify(capture, layout, plan.Output.Encryption?.UserPassword, warnings);
 
