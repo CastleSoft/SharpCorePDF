@@ -204,6 +204,17 @@ internal sealed partial class PdfCrossReferenceReader
         return window.IndexOf("/ObjStm"u8) >= 0;
     }
 
+    /// <summary>Determines whether an offset names a byte of the document.</summary>
+    /// <param name="offset">The offset.</param>
+    /// <returns><see langword="true"/> when the offset is inside the data.</returns>
+    /// <remarks>
+    /// Reconstruction keeps the entries of the table it is repairing beside the ones the scan found, and those
+    /// offsets are whatever the damaged table stated: past the end of the file, negative, or beyond the range
+    /// of an <see cref="int"/>, which wraps to a negative index when it is cast. A slice of the data needs
+    /// this check; a parser does not, because <see cref="PdfLexer"/> clamps the position it starts at.
+    /// </remarks>
+    private bool IsInside(long offset) => offset >= 0 && offset < data.Length;
+
     /// <summary>Parses the object whose header is at an offset.</summary>
     /// <param name="offset">The offset.</param>
     /// <returns>The object, or <see langword="null"/>.</returns>
@@ -223,7 +234,7 @@ internal sealed partial class PdfCrossReferenceReader
     private PdfDictionary? FindCrossReferenceStreamTrailer()
     {
         foreach (var offset in table.Entries.Values
-            .Where(entry => entry.Type == XrefEntryType.Uncompressed)
+            .Where(entry => entry.Type == XrefEntryType.Uncompressed && IsInside(entry.Offset))
             .Select(entry => entry.Offset)
             .OrderByDescending(offset => offset))
         {

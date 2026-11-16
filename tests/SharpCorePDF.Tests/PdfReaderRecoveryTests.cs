@@ -20,6 +20,46 @@ namespace SharpCorePDF.Tests;
 public sealed class PdfReaderRecoveryTests
 {
     /// <summary>
+    /// A table whose trailer names no catalog is rebuilt, and an entry the damaged table states past the end
+    /// of the file is passed over rather than read: reconstruction keeps the table's own entries beside the
+    /// ones it scans, and the offset of such an entry is whatever the damage left — the document fuzz target
+    /// found it sliced the data at one and threw. Cast to an index, 9,999,999,999 lands past the end and
+    /// 3,000,000,000 wraps to a negative one; the search for a cross-reference stream's trailer sliced the data
+    /// at either. The entry is object 1, ahead of the catalog, so every search meets it before the catalog.
+    /// </summary>
+    /// <param name="offset">The ten-digit offset the damaged table states.</param>
+    [Theory]
+    [InlineData(9_999_999_999L)]
+    [InlineData(3_000_000_000L)]
+    public void Rebuilds_a_table_that_states_an_offset_past_the_end_of_the_file(long offset)
+    {
+        var output = new MemoryStream();
+        var offsets = new long[5];
+
+        void Write(string text) => output.Write(Encoding.Latin1.GetBytes(text));
+
+        Write("%PDF-1.7\n");
+        offsets[2] = output.Position;
+        Write("2 0 obj\n<< /Type /Catalog /Pages 3 0 R >>\nendobj\n");
+        offsets[3] = output.Position;
+        Write("3 0 obj\n<< /Type /Pages /Kids [4 0 R] /Count 1 >>\nendobj\n");
+        offsets[4] = output.Position;
+        Write("4 0 obj\n<< /Type /Page /Parent 3 0 R /MediaBox [0 0 200 200] >>\nendobj\n");
+
+        var xref = output.Position;
+        Write("xref\n0 5\n0000000000 65535 f \n");
+        Write($"{offset:D10} 00000 n \n");
+        Write($"{offsets[2]:D10} 00000 n \n{offsets[3]:D10} 00000 n \n{offsets[4]:D10} 00000 n \n");
+        Write($"trailer\n<< /Size 5 >>\nstartxref\n{xref}\n%%EOF\n");
+
+        var reader = new PdfFileReader(output.ToArray(), "past-the-end.pdf", PdfEngineOptions.Default);
+
+        Assert.True(reader.CrossReferenceTable.WasReconstructed);
+        Assert.Single(reader.Pages);
+        Assert.Null(reader.Resolve(1));
+    }
+
+    /// <summary>
     /// A file whose bytes moved after its table was written — here three bytes inserted behind the header, the
     /// way a converted line ending or a prepended byte order mark moves them — has a table that parses and
     /// offsets that land in the middle of objects. The table is rebuilt instead of the objects going missing.

@@ -110,6 +110,16 @@ against an empty feed.
   files tree that only names an external file is listed, with a warning and a length of zero; copying it
   threw `ArgumentException` as if the caller had passed a file of another document (found by the veraPDF
   corpus run, `isartor-6-1-11-t01-fail-a.pdf`).
+- **A merge walks a deep or looping outline without ending the process.** The outline was copied
+  recursively, one stack frame per level, and a source nested about fifty thousand levels deep overflowed
+  the stack. The walk stops at 256 levels with `BookmarksTruncated`, and a bookmark reached a second time
+  — a `/First` or `/Next` that points back up the tree, or a child two parents share — is copied once and
+  reported with `BookmarkSkipped` (found by the `document` fuzz target).
+- **Rebuilding a table passes over the offsets it cannot read.** Reconstruction keeps the damaged table's
+  entries beside the ones its scan finds, and the search for a cross-reference stream's trailer sliced the
+  document at each of their offsets unchecked: one past the end of the file, or beyond the range of an
+  index, threw `ArgumentOutOfRangeException` instead of letting the rebuild find the catalog (found by the
+  `document` fuzz target).
 
 - **Run-length images are decoded.** `RunLengthDecode` joins Flate, LZW and the two ASCII filters: a
   bilevel or scan-style image that declares it now yields its samples — and `Gray8`, `Rgb24` or `Cmyk32`
