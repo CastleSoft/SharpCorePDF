@@ -40,8 +40,10 @@ public sealed partial class PdfContentReaderTests
         var reader = Reader();
         var image = Assert.Single((await reader.ReadImagesAsync(source, PageRange.All, cancellationToken: Token)).Items);
 
-        await Assert.ThrowsAsync<SharpCorePDF.Domain.Exceptions.PdfSourceFormatException>(
+        var exception = await Assert.ThrowsAsync<SharpCorePDF.Domain.Exceptions.PdfSourceFormatException>(
             () => reader.CopyImageDataAsync(source, image, Stream.Null, cancellationToken: Token));
+
+        Assert.Contains("Flate data of the payload is damaged", exception.Message, StringComparison.Ordinal);
     }
 
     /// <summary>One object drawn twice and shared by two pages is one entry carrying both pages.</summary>

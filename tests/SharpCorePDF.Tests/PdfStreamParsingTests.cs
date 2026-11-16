@@ -91,10 +91,47 @@ public sealed class PdfStreamParsingTests
             .Concat(Encoding.Latin1.GetBytes("\nendstream"))
             .ToArray();
 
-        var parser = new PdfObjectParser(bytes, "damaged.pdf", 0, null, 64);
+        var parser = new PdfObjectParser(bytes.Concat(Encoding.Latin1.GetBytes("\n42")).ToArray(), "damaged.pdf", 0, null, 64);
         var stream = Assert.IsType<PdfStream>(parser.ParseObject());
 
         Assert.Equal(content, PdfFilters.Decode(stream, "damaged.pdf"));
+
+        // The parser stands behind the keyword that ended the body, so the next object reads.
+        Assert.Equal(42, Assert.IsType<PdfInteger>(parser.ParseObject()).Value);
+    }
+
+    /// <summary>
+    /// At most sixteen candidates are inflated: each is inflated from the start of the data, and a hostile
+    /// file can hold one every ten bytes. A body whose complete end is the sixteenth candidate is found; one
+    /// whose end is the seventeenth is not, and the first candidate that inflated is kept instead.
+    /// </summary>
+    /// <param name="falseEnds">The <c>endstream</c> words inside the compressed data.</param>
+    /// <param name="complete">Whether the complete body is expected.</param>
+    [Theory]
+    [InlineData(15, true)]
+    [InlineData(16, false)]
+    public void Inflates_at_most_sixteen_candidates(int falseEnds, bool complete)
+    {
+        var text = string.Concat(Enumerable.Range(0, falseEnds).Select(index => $"({index})\nendstream\n")) + "(end)";
+        var content = Encoding.Latin1.GetBytes(text);
+        using var buffer = new MemoryStream();
+
+        using (var zlib = new System.IO.Compression.ZLibStream(buffer, System.IO.Compression.CompressionLevel.NoCompression, leaveOpen: true))
+        {
+            zlib.Write(content);
+        }
+
+        var bytes = Encoding.Latin1.GetBytes("<< /Filter /FlateDecode >>\nstream\n")
+            .Concat(buffer.ToArray())
+            .Concat(Encoding.Latin1.GetBytes("\nendstream\n42"))
+            .ToArray();
+
+        var parser = new PdfObjectParser(bytes, "damaged.pdf", 0, null, 64);
+        var stream = Assert.IsType<PdfStream>(parser.ParseObject());
+        var decoded = PdfFilters.Decode(stream, "damaged.pdf");
+
+        Assert.Equal(complete, decoded.SequenceEqual(content));
+        Assert.Equal(complete ? 42 : 0, complete ? Assert.IsType<PdfInteger>(parser.ParseObject()).Value : 0);
     }
 
     /// <summary>A stream is read behind an indirect object header.</summary>

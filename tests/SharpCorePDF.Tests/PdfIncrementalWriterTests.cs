@@ -158,6 +158,7 @@ public sealed class PdfIncrementalWriterTests
         Assert.DoesNotContain("trailer", revision, StringComparison.Ordinal);
         Assert.Equal("XRef", section.Dictionary.GetName("Type"));
         Assert.Equal(StartXref(source), section.Dictionary.GetInteger("Prev"));
+        Assert.Equal(0, Assert.IsType<PdfInteger>(Assert.IsType<PdfArray>(section.Dictionary.Get("Index")).Items[0]).Value);
         Assert.True(reader.CrossReferenceTable.NewestSectionIsStream);
         Assert.False(reader.CrossReferenceTable.WasReconstructed);
         Assert.Equal("streamed", (await new PdfDocumentReader(Options).ReadAsync("edited.pdf", new MemoryStream(edited), null, Token)).Metadata.Title);

@@ -74,7 +74,9 @@ public sealed class PdfMergeFidelityTests
         Assert.Equal(4, box.Count);
         Assert.Equal(PdfPageSize.A4.WidthPoints, ((PdfReal)box.Items[2]).Value, 3);
         Assert.Equal(PdfPageSize.A4.HeightPoints, ((PdfReal)box.Items[3]).Value, 3);
-        Assert.Contains(result.Warnings, warning => warning.Kind == PdfWarningKind.PageSizeAssumed);
+        Assert.Contains(
+            result.Warnings,
+            warning => warning.Kind == PdfWarningKind.PageSizeAssumed && warning.Message.Contains("page 1 ", StringComparison.Ordinal));
     }
 
     /// <summary>A page that states its own media box keeps it, and no size is assumed for it.</summary>

@@ -255,7 +255,7 @@ public sealed partial class PdfDocumentEditorTests
                 PdfAnnotations.FreeText(
                     new PdfRectangle(72, 500, 320, 530),
                     "Reviewed",
-                    new PdfStandardTextStyle(StandardFont.Helvetica, 10, PdfColor.FromRgb(255, 0, 0)))),
+                    new PdfStandardTextStyle(StandardFont.Helvetica, 10, PdfColor.FromRgb(255, 128, 51)))),
             cancellationToken: Token);
 
         var reader = Read(edited);
@@ -264,7 +264,7 @@ public sealed partial class PdfDocumentEditorTests
         var appearance = Assert.IsType<PdfStream>(reader.Resolve(reader.ResolveDictionary(annotation?.Get("AP"))?.Get("N")));
         var defaultAppearance = Assert.IsType<PdfString>(annotation?.Get("DA"));
 
-        Assert.Equal("/Helv 10 Tf 1 0 0 rg", Encoding.ASCII.GetString(defaultAppearance.Bytes));
+        Assert.Equal("/Helv 10 Tf 1 0.50196 0.2 rg", Encoding.ASCII.GetString(defaultAppearance.Bytes));
         Assert.IsType<PdfDictionary>(reader.Resolve(appearance.Dictionary.Get("Resources")));
     }
 

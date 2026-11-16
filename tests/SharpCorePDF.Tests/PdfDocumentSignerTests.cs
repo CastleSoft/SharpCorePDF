@@ -104,6 +104,22 @@ public sealed class PdfDocumentSignerTests
         Assert.False(reader.CrossReferenceTable.WasReconstructed);
         Assert.Equal(PdfSignatureIntegrity.Valid, validation.Integrity);
         Assert.True(validation.Signer.CoversWholeDocument);
+
+        // The revision lists the objects it wrote and the stream itself, and not the head of the free list,
+        // which the first revision already lists.
+        var section = Assert.IsType<PdfStream>(reader.Resolve(reader.CrossReferenceTable.Trailer.GetInteger("Size")!.Value - 1));
+        var index = Assert.IsType<PdfArray>(section.Dictionary.Get("Index"));
+
+        Assert.NotEqual(0, Assert.IsType<PdfInteger>(index.Items[0]).Value);
+    }
+
+    /// <summary>A signature appended to a document with a classic table ends in a classic table.</summary>
+    [Fact]
+    public async Task Signs_a_document_that_uses_a_classic_table_with_one()
+    {
+        var signed = await SigningFixtures.SignAsync(SigningFixtures.BuildDocument(), SigningFixtures.Options(Certificate));
+
+        Assert.False(new PdfFileReader(signed, "signed.pdf", PdfEngineOptions.Default).CrossReferenceTable.NewestSectionIsStream);
     }
 
     /// <summary>

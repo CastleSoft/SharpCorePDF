@@ -166,7 +166,6 @@ internal sealed class PdfWriter
 
         if (asStream)
         {
-            trailer.SetInteger("Size", Math.Max(trailer.GetInteger("Size") ?? 0, lastObjectNumber + 1));
             PdfCrossReferenceStreamWriter.Write(
                 output,
                 startXref,
