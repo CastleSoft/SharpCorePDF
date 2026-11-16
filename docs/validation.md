@@ -56,8 +56,8 @@ dotnet run --project .\tools\SharpCorePDF.Validation -c Release -- corpus $env:T
 
 python docs/tools/validate-text.py $env:TEMP\corpus
 python docs/tools/validate-encryption.py $env:TEMP\corpus
-python docs/tools/validate-incremental.py $env:TEMP\corpus --known-defect id-first --known-defect appends-only
-python docs/tools/validate-signatures.py --manifest $env:TEMP\corpus\manifest.json --known-defect signed-then-edited.pdf:FirstSignature
+python docs/tools/validate-incremental.py $env:TEMP\corpus
+python docs/tools/validate-signatures.py --manifest $env:TEMP\corpus\manifest.json
 python docs/tools/validate-fonts.py $env:TEMP\SharpCorePDF.Examples\output
 python docs/tools/render-compare.py --exclude protected.pdf $env:TEMP\SharpCorePDF.Examples\output
 
@@ -83,8 +83,6 @@ fix. This is the list on 2026-11-16, every entry reproduced, not inferred:
 
 | Defect | Found by | Evidence |
 | --- | --- | --- |
-| An incremental update writes a new identifier into both elements of `/ID`; ISO 32000-1 §14.4 keeps the first | #10 | `PdfIncrementalInvariantTests.Keeps_the_first_identifier_element_across_an_incremental_update` (skipped); `validate-incremental.py` `id-first` |
-| `UseIncrementalUpdate` appends a renumbered copy of the whole document rather than the objects it changed: every byte of the earlier revision is kept, but the file grows by its own size per edit, and the signature dictionary is written again after signing, so pyHanko places a signature followed by an edit as `CONTIGUOUS_BLOCK_FROM_START` with modification level `OTHER` instead of `ENTIRE_REVISION` | #10, #3 | `validate-incremental.py` `appends-only`; `validate-signatures.py` on `signed-then-edited.pdf` |
 | A merge copies a page that states no `/MediaBox` (and inherits none) without one, so the result breaks the rule that every page has a media box; qpdf repairs it by assuming Letter | #2 | `validate-pdf.py` on `inspected.pdf` and `with-warnings.pdf` (both merge a page of `NamedDests.pdf`) |
 
 Fixed since the list was first drawn up, each with the test that fails without its fix:
@@ -99,6 +97,8 @@ Fixed since the list was first drawn up, each with the test that fails without i
 | The empty name as a dictionary key (`/` alone, which PDF allows) stopped the document opening | `PdfDictionary.Set` accepts it; the entry is kept and written back as `/` | `PdfObjectModelTests.Keeps_an_entry_whose_key_is_the_empty_name`, `Opens_a_document_that_uses_the_empty_name_as_a_key` |
 | A glyph drawn upside down (negative font size) faulted text extraction | `PdfGlyph.BoundingBox` takes the box between descender and ascender whichever way round | `PdfTextScannerTests.Gives_a_glyph_drawn_upside_down_a_box` |
 | `PdfDate.TryParse` threw for a time-zone offset beyond 14 hours | an offset no time zone has is read as no offset | `PdfSerializationTests.Reads_an_offset_no_time_zone_has_as_no_offset` |
+| An incremental update wrote a new identifier into both elements of `/ID` | the first element of the source's `/ID` is kept; only the second is new | `PdfIncrementalInvariantTests.Keeps_the_first_identifier_element_across_an_incremental_update` |
+| `UseIncrementalUpdate` appended a renumbered copy of the whole document, rewriting the signature dictionary after signing | the edited document's objects keep their numbers, and an object written exactly as the source states it is left out: rotating one page of a signed document appends 716 bytes and three objects instead of 20,969 bytes and twelve, and pyHanko places the signature at `ENTIRE_REVISION` | `PdfIncrementalInvariantTests.Appends_only_the_objects_an_edit_changes`, `Leaves_the_signature_dictionary_out_of_an_appended_revision` |
 
 ## Corpus readings, 2026-11-16
 

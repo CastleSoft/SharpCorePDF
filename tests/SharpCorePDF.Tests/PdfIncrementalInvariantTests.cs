@@ -2,6 +2,7 @@ using SharpCorePDF.Application.Services;
 using SharpCorePDF.Domain.Aggregates;
 using SharpCorePDF.Domain.ValueObjects;
 using SharpCorePDF.Infrastructure;
+using SharpCorePDF.Infrastructure.Extensions;
 using SharpCorePDF.Infrastructure.Pdf;
 using SharpCorePDF.Infrastructure.Sources;
 
@@ -75,7 +76,7 @@ public sealed class PdfIncrementalInvariantTests
     }
 
     /// <summary>The permanent half of the identifier survives an update; only the second half may change.</summary>
-    [Fact(Skip = "Known defect: PdfEditEngine.WriteTrailer writes a new identifier into both elements of /ID even when the revision is appended (PdfEditEngine.Document.cs). Remove the skip with the fix.")]
+    [Fact]
     public async Task Keeps_the_first_identifier_element_across_an_incremental_update()
     {
         var source = Source();
@@ -84,6 +85,98 @@ public sealed class PdfIncrementalInvariantTests
         Assert.Equal(Convert.FromHexString(SourceId), Identifier(source, 0));
         Assert.Equal(Identifier(source, 0), Identifier(updated, 0));
     }
+
+    /// <summary>
+    /// An appended revision carries what the edit changed under the numbers those objects already had: rotating
+    /// one page redeclares that page and the few objects around it, and adds no copy of the document under new
+    /// numbers.
+    /// </summary>
+    [Fact]
+    public async Task Appends_only_the_objects_an_edit_changes()
+    {
+        var source = Source();
+        var updated = await AppendAsync(source, PdfEditPlan.Create().RotatePage(1, PageRotation.Clockwise90));
+
+        var before = ObjectNumbers(source);
+        var appended = ObjectNumbers(updated[source.Length..]);
+
+        Assert.NotEmpty(appended);
+        Assert.Subset(before, appended);
+        Assert.True(appended.Count <= 4, $"the revision redeclares {appended.Count} objects: {string.Join(", ", appended)}");
+    }
+
+    /// <summary>
+    /// A signature dictionary is not written again by an update appended after signing: it stays the object of
+    /// the signed revision, which is what lets a validator place the signature at the end of that revision.
+    /// </summary>
+    [Fact]
+    public async Task Leaves_the_signature_dictionary_out_of_an_appended_revision()
+    {
+        var signed = await SigningFixtures.SignAsync(Source(), SigningFixtures.Options(SigningFixtures.Certificate));
+        var updated = await AppendAsync(signed, PdfEditPlan.Create().RotatePage(1, PageRotation.Clockwise90));
+        var revision = System.Text.Encoding.Latin1.GetString(updated, signed.Length, updated.Length - signed.Length);
+
+        Assert.DoesNotContain("/ByteRange", revision, StringComparison.Ordinal);
+        Assert.DoesNotContain("/Type /Sig", revision, StringComparison.Ordinal);
+
+        var validation = Assert.Single(await SigningFixtures.ValidateAsync(updated));
+
+        Assert.True(validation.IsValid);
+        Assert.False(validation.Signer.CoversWholeDocument);
+    }
+
+    /// <summary>
+    /// The objects an edit creates are written into the revision under numbers of their own: an inserted page
+    /// is a new object, and a reader of the result finds it between the pages that were there.
+    /// </summary>
+    [Fact]
+    public async Task Appends_the_objects_an_edit_creates()
+    {
+        var source = Source();
+        var updated = await AppendAsync(
+            source,
+            PdfEditPlan.Create().InsertPage(2, PdfPageSize.A5, page => page.DrawText("inserted", 20, 40, PdfTypeface.Standard(StandardFont.Helvetica), 10)));
+
+        var reader = new PdfFileReader(updated, "updated.pdf", Options);
+        var fresh = ObjectNumbers(updated[source.Length..]).Except(ObjectNumbers(source)).ToList();
+
+        Assert.Equal(3, reader.Pages.Count);
+        Assert.NotEmpty(fresh);
+        Assert.All(fresh, number => Assert.True(number > ObjectNumbers(source).Max));
+    }
+
+    /// <summary>
+    /// A source whose objects refer to its own catalog and information dictionary is updated with one
+    /// definition of each in the revision: the engine writes them, and the copier, which reaches them through
+    /// those references, must not write a second copy under the same number.
+    /// </summary>
+    [Fact]
+    public async Task Writes_each_object_once_when_the_source_refers_to_its_own_catalog()
+    {
+        var builder = new PdfBuilder();
+        var catalog = builder.Reserve();
+        var pages = builder.Reserve();
+
+        builder.Add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Back 1 0 R /About 4 0 R >>");
+        builder.Add("<< /Title (Refers to its own catalog) >>");
+        builder.Set(catalog, "<< /Type /Catalog /Pages 2 0 R >>");
+        builder.Set(pages, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+
+        var source = builder.Build(catalog, "/Info 4 0 R /ID [<00112233445566778899AABBCCDDEEFF> <00112233445566778899AABBCCDDEEFF>]");
+        var updated = await AppendAsync(source, PdfEditPlan.Create().RotatePage(1, PageRotation.Clockwise90));
+        var revision = System.Text.Encoding.Latin1.GetString(updated, source.Length, updated.Length - source.Length);
+        var declared = System.Text.RegularExpressions.Regex.Matches(revision, @"(?m)^(\d+) 0 obj\b")
+            .Select(match => match.Groups[1].Value)
+            .ToList();
+
+        Assert.Equal(declared.Distinct().Count(), declared.Count);
+        Assert.Equal(90, (int)(new PdfFileReader(updated, "updated.pdf", Options).Pages[0].Dictionary.GetInteger("Rotate") ?? 0L));
+    }
+
+    private static SortedSet<int> ObjectNumbers(byte[] bytes) =>
+        [.. System.Text.RegularExpressions.Regex
+            .Matches(System.Text.Encoding.Latin1.GetString(bytes), @"(?m)^(\d+) 0 obj\b")
+            .Select(match => int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture))];
 
     private static byte[] Source() => PdfDocumentBuilder.Create(PdfAuthoringOptions.Default with { DocumentId = SourceId })
         .AddPage(PdfPageSize.A5, page => page.DrawText("one", 72, 100, PdfTypeface.Standard(StandardFont.Helvetica), 12))

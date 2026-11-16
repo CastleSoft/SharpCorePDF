@@ -65,13 +65,20 @@ against an empty feed.
 - **`PdfDate.TryParse` answers instead of throwing** for a time-zone offset beyond fourteen hours, which it
   now reads as no offset; one malformed `/CreationDate` no longer fails the inspection of the document.
 
+- **An incremental update appends what changed, and only that.** `UseIncrementalUpdate` appended a copy of
+  the whole document under new object numbers: the file grew by its own size per edit, and the signature
+  dictionary of a signed source was written again after signing, so validators that look at what changed
+  after a signature (pyHanko, Acrobat) saw the signed field as modified. The edited document's objects now
+  keep their numbers and an object written exactly as the source already states it is left out — rotating a
+  page of a signed document appends 716 bytes and three objects instead of 20,969 bytes and twelve.
+- **An incremental update keeps the permanent identifier.** The first element of `/ID` is the source's in
+  every revision, as ISO 32000-1 §14.4 requires; only the second element is new.
+
 ### Known defects, found by the new checks and not yet fixed
 
 Each is reproduced, pinned by a skipped test or a strict `--known-defect` flag that fails the run once the
 defect is fixed, and listed in [`docs/validation.md`](docs/validation.md#known-defects).
 
-- An incremental update rewrites both elements of `/ID`, and appends a renumbered copy of the whole document
-  rather than the objects it changed — which also rewrites the signature dictionary after signing.
 - A merge copies a page that states no `/MediaBox` without one.
 
 - **Run-length images are decoded.** `RunLengthDecode` joins Flate, LZW and the two ASCII filters: a

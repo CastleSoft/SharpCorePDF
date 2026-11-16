@@ -21,8 +21,7 @@
 #
 # --known-defect / --known names a failure that is recorded and not yet fixed. Each is strict: when the
 # defect is fixed the check passes, the flag no longer matches, and the run fails until the flag is removed
-# in the same change as the fix. The in-suite counterparts are the skipped tests in
-# PdfSignatureAttackTests and PdfIncrementalInvariantTests.
+# in the same change as the fix.
 #
 # The validator versions are pinned in docs/tools/validation-requirements.txt, pdfjs-dist below.
 
@@ -119,20 +118,11 @@ jobs:
             "$RUNNER_TEMP/corpus/text-merged.pdf" "$RUNNER_TEMP/corpus/incremental.pdf" \
             "$RUNNER_TEMP/corpus/signed.pdf"
 
-      # id-first: the editor writes a new identifier into both elements of /ID on an appended revision.
-      # appends-only: the editor's incremental update appends a renumbered copy of the whole document
-      # rather than the objects it changed.
       - name: Incremental update invariants
-        run: |
-          python docs/tools/validate-incremental.py "$RUNNER_TEMP/corpus" \
-            --known-defect id-first --known-defect appends-only
+        run: python docs/tools/validate-incremental.py "$RUNNER_TEMP/corpus"
 
-      # The same copy rewrites the signature dictionary after signing, which is why pyHanko cannot place the
-      # first signature of signed-then-edited.pdf at the end of a revision.
       - name: Signatures, pyHanko
-        run: |
-          python docs/tools/validate-signatures.py --manifest "$RUNNER_TEMP/corpus/manifest.json" \
-            --known-defect signed-then-edited.pdf:FirstSignature
+        run: python docs/tools/validate-signatures.py --manifest "$RUNNER_TEMP/corpus/manifest.json"
 
       - name: Fuzz targets over their seeds
         run: |
