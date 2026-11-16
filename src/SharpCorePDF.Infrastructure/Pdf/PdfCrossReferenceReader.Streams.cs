@@ -11,7 +11,7 @@ namespace SharpCorePDF.Infrastructure.Pdf;
 /// </remarks>
 internal sealed partial class PdfCrossReferenceReader
 {
-    private (long? Previous, long? Hybrid) ReadCrossReferenceStream(int offset, bool isNewest)
+    private (long? Previous, long? Hybrid) ReadCrossReferenceStream(int offset, bool isNewest, HashSet<long>? freedByTable = null)
     {
         var parser = new PdfObjectParser(data, sourceName, offset, null, options.MaxNestingDepth);
 
@@ -48,7 +48,7 @@ internal sealed partial class PdfCrossReferenceReader
         var size = dictionary.GetInteger("Size") ?? 0;
         var ranges = ReadIndexRanges(dictionary, size);
 
-        ReadEntries(decoded, widthType, widthField1, widthField2, ranges);
+        ReadEntries(decoded, widthType, widthField1, widthField2, ranges, freedByTable);
 
         var previous = dictionary.GetInteger("Prev");
         table.MergeTrailer(dictionary, onlyMissingKeys: !isNewest);
@@ -81,7 +81,8 @@ internal sealed partial class PdfCrossReferenceReader
         int widthType,
         int widthField1,
         int widthField2,
-        List<(long First, long Count)> ranges)
+        List<(long First, long Count)> ranges,
+        HashSet<long>? freedByTable)
     {
         var entrySize = widthType + widthField1 + widthField2;
 
@@ -112,7 +113,18 @@ internal sealed partial class PdfCrossReferenceReader
                     _ => XrefEntryType.Free,
                 };
 
-                table.Add(new XrefEntry(first + index, field1, (int)field2, kind));
+                var entry = new XrefEntry(first + index, field1, (int)field2, kind);
+
+                // The stream of a hybrid section describes what that section's table lists as free, so it may
+                // replace those entries — and only those: a number a newer section freed stays freed.
+                if (freedByTable?.Contains(entry.ObjectNumber) == true && table.Get(entry.ObjectNumber) is { Type: XrefEntryType.Free })
+                {
+                    table.AddOrReplace(entry);
+                }
+                else
+                {
+                    table.Add(entry);
+                }
             }
         }
     }

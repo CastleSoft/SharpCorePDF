@@ -164,11 +164,6 @@ internal sealed partial class PdfFileReader
             return cached;
         }
 
-        if (fromObjectStreams.TryGetValue(objectNumber, out var streamed))
-        {
-            return streamed;
-        }
-
         var entry = CrossReferenceTable.Get(objectNumber);
 
         if (entry is not { } xref || !xref.IsInUse)

@@ -85,6 +85,16 @@ internal sealed partial class PdfFileReader
                     continue;
                 }
 
+                // The table decides where an object is. A stream still holds the copies it held when it was
+                // written — an object a later revision rewrote in the file body, or deleted — and only the
+                // numbers the table places in this stream are taken from it, so neither answers for the
+                // newer state.
+                if (CrossReferenceTable.Get(numbers[index]) is not { Type: XrefEntryType.Compressed } placed
+                    || placed.Offset != containerObjectNumber)
+                {
+                    continue;
+                }
+
                 var parser = new PdfObjectParser(decoded, SourceName, (int)position, null, options.MaxNestingDepth);
                 fromObjectStreams[numbers[index]] = parser.ParseObject();
             }
