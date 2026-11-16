@@ -104,8 +104,7 @@ public sealed class PdfSignatureAttackTests
     /// what must fail is the claim that the signature covers the whole document, because part of the
     /// document is now something other than the signature value.
     /// </summary>
-    [Fact(Skip =
-        "Known defect: SignatureValidator does not check that the gap between the two ranges is exactly the /Contents string, so this wrapped document is reported as covering the whole file. Remove the skip with the fix.")]
+    [Fact]
     public async Task Does_not_report_a_gap_that_holds_more_than_the_signature_value_as_covering_the_document()
     {
         var signed = await SignAsync();
@@ -114,14 +113,76 @@ public sealed class PdfSignatureAttackTests
         // The attack only works while the signed bytes are unchanged; this is what makes it an attack.
         var validation = Assert.Single(await SigningFixtures.ValidateAsync(wrapped));
 
-        Assert.False(
-            validation.Signer.CoversWholeDocument && validation.IsValid,
-            "a document whose uncovered gap carries more than the signature value must not be reported as covered");
+        Assert.False(validation.Signer.CoversWholeDocument);
+        Assert.False(validation.IsValid);
+        Assert.NotEqual(PdfSignatureIntegrity.Valid, validation.Integrity);
+
+        var (gapStart, _) = Gap(signed);
+        var problem = Assert.Single(validation.Problems, problem => problem.Kind == PdfSignatureProblemKind.MalformedByteRange);
+
+        Assert.Contains(gapStart.ToString(CultureInfo.InvariantCulture), problem.Message, StringComparison.Ordinal);
+
+        // The wrapped gap is the finding; the revision count would be a second, misleading one.
+        Assert.DoesNotContain(validation.Problems, problem => problem.Kind == PdfSignatureProblemKind.RevisionNotCovered);
     }
 
     /// <summary>
-    /// The precondition the skipped wrapping test depends on, asserted on its own so it keeps running: the
-    /// injection leaves every covered byte as it was, which is why only a gap check can catch it.
+    /// A gap that is not exactly one hexadecimal string is refused whichever way it fails to be one: no
+    /// opening delimiter, no closing delimiter, or a byte inside it that is neither a digit nor whitespace.
+    /// </summary>
+    /// <param name="variant">Which byte of the gap is changed.</param>
+    [Theory]
+    [InlineData("opening-delimiter")]
+    [InlineData("closing-delimiter")]
+    [InlineData("not-a-hex-digit")]
+    public async Task Refuses_a_gap_that_is_not_one_hexadecimal_string(string variant)
+    {
+        var signed = await SignAsync();
+        var (gapStart, gapEnd) = Gap(signed);
+        var changed = (byte[])signed.Clone();
+        var (index, value) = variant switch
+        {
+            "opening-delimiter" => (gapStart, (byte)'('),
+            "closing-delimiter" => (gapEnd - 1, (byte)')'),
+            "not-a-hex-digit" => (gapEnd - 2, (byte)'g'),
+            _ => throw new ArgumentOutOfRangeException(nameof(variant), variant, "no such variant"),
+        };
+
+        changed[index] = value;
+
+        var validation = Assert.Single(await SigningFixtures.ValidateAsync(changed));
+
+        Assert.False(validation.IsValid);
+        Assert.False(validation.Signer.CoversWholeDocument);
+        Assert.Contains(validation.Problems, problem => problem.Kind == PdfSignatureProblemKind.MalformedByteRange);
+    }
+
+    /// <summary>
+    /// Whitespace inside the value is part of PDF's hexadecimal string syntax, and an odd number of digits is
+    /// completed with a zero; a gap written that way is still exactly the signature value and stays valid.
+    /// </summary>
+    [Fact]
+    public async Task Accepts_whitespace_and_an_odd_digit_count_inside_the_value()
+    {
+        var signed = await SignAsync();
+        var (_, gapEnd) = Gap(signed);
+        var spaced = (byte[])signed.Clone();
+
+        // The last digit of the padding becomes a space: the value now has an odd number of digits, which a
+        // reader completes with the zero that was there.
+        Assert.Equal((byte)'0', spaced[gapEnd - 2]);
+        spaced[gapEnd - 2] = (byte)' ';
+
+        var validation = Assert.Single(await SigningFixtures.ValidateAsync(spaced));
+
+        Assert.True(validation.IsValid);
+        Assert.True(validation.Signer.CoversWholeDocument);
+        Assert.Equal(PdfSignatureIntegrity.Valid, validation.Integrity);
+    }
+
+    /// <summary>
+    /// The precondition the wrapping test depends on: the injection leaves every covered byte as it was, which
+    /// is why only a gap check can catch it.
     /// </summary>
     [Fact]
     public async Task Leaves_every_covered_byte_unchanged_when_the_gap_is_wrapped()

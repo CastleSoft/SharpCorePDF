@@ -83,17 +83,22 @@ fix. This is the list on 2026-11-16, every entry reproduced, not inferred:
 
 | Defect | Found by | Evidence |
 | --- | --- | --- |
-| The signature validator does not check that the gap between the two byte ranges is exactly the `/Contents` string, so a gap that carries extra entries is still reported as covering the whole document (the signature-wrapping class) | #3 | `PdfSignatureAttackTests.Does_not_report_a_gap_that_holds_more_than_the_signature_value_as_covering_the_document` (skipped; fails when run) |
 | An incremental update writes a new identifier into both elements of `/ID`; ISO 32000-1 §14.4 keeps the first | #10 | `PdfIncrementalInvariantTests.Keeps_the_first_identifier_element_across_an_incremental_update` (skipped); `validate-incremental.py` `id-first` |
 | `UseIncrementalUpdate` appends a renumbered copy of the whole document rather than the objects it changed: every byte of the earlier revision is kept, but the file grows by its own size per edit, and the signature dictionary is written again after signing, so pyHanko places a signature followed by an edit as `CONTIGUOUS_BLOCK_FROM_START` with modification level `OTHER` instead of `ENTIRE_REVISION` | #10, #3 | `validate-incremental.py` `appends-only`; `validate-signatures.py` on `signed-then-edited.pdf` |
 | A merge copies a page that states no `/MediaBox` (and inherits none) without one, so the result breaks the rule that every page has a media box; qpdf repairs it by assuming Letter | #2 | `validate-pdf.py` on `inspected.pdf` and `with-warnings.pdf` (both merge a page of `NamedDests.pdf`) |
-| A Flate stream has no limit on its decoded size: a 1.1 MB document inflates past 1 GiB | #12 | `flate-bomb.pdf`: `OutOfMemoryException` under a 1 GiB heap limit |
-| A chain of indirect `/Length` references is resolved by recursion without a depth limit | #12 | `length-chain.pdf`: the process dies with a stack overflow, which no caller can catch |
-| An object stream's `/N` sizes an allocation before anything checks it against the stream | #12 | `objstm-count.pdf` (513 bytes): `OutOfMemoryException` |
 | The JPEG decoder indexes its four Huffman tables with a scan's 4-bit selector unchecked | #12, #1 | `jpeg-selector.pdf`: `IndexOutOfRangeException` from `JpegDecoder.DecodeBlock` |
 | A dictionary key that is the empty name (`/` alone, which PDF syntax allows) makes `PdfDictionary.Set` throw `ArgumentException` while parsing, so the document does not open at all | #12 | pdf.js corpus: `issue3188.pdf`, `issue5896.pdf`, `pdfjs_wikipedia.pdf`, `poppler-742-0-fuzzed.pdf` |
 | A glyph whose box comes out upside down (a negative font size or a flipped font matrix) makes `PdfGlyph.BoundingBox` construct a `PdfRectangle` that throws, so text extraction faults | #12 | pdf.js corpus: `issue14415.pdf` |
 | `PdfDate.TryParse` throws `ArgumentOutOfRangeException` for a time-zone offset beyond 14 hours instead of answering false, so one malformed `/CreationDate` faults the whole inspection | #12 | pdf.js corpus: `TAMReview.pdf` |
+
+Fixed since the list was first drawn up, each with the test that fails without its fix:
+
+| Defect | Fixed by | Test |
+| --- | --- | --- |
+| The signature validator accepted a `/ByteRange` gap holding more than the `/Contents` string (signature wrapping) | the gap must be exactly one hex string, equal to the dictionary's `/Contents` | `PdfSignatureAttackTests.Does_not_report_a_gap_that_holds_more_than_the_signature_value_as_covering_the_document` |
+| No limit on the decoded size of a Flate, LZW or RunLength stream | `PdfEngineOptions.MaxDecodedStreamBytes` (128 MiB) | `PdfFilterTests.Refuses_a_flate_stream_that_decodes_past_the_limit` and its LZW, RunLength and content-stream companions |
+| A chain of indirect `/Length` references overflowed the stack | the chain is followed no deeper than `MaxNestingDepth`, then the stream is found by its `endstream` | `PdfReaderRecoveryTests.Reads_a_stream_whose_length_is_a_chain_of_sixty_thousand_streams` |
+| An object stream's `/N`, and a JPEG frame's width and height, sized allocations unchecked | `/N` is bounded by what the stream can hold; a JPEG above the caller's budget is measured from its header, and working sizes are computed in 64 bits | `PdfReaderRecoveryTests.Reads_an_object_stream_whose_count_its_header_cannot_hold`, `PdfJpegFilterTests.Measures_a_frame_too_large_for_the_budget_without_allocating_it` |
 
 ## Corpus readings, 2026-11-16
 
@@ -101,7 +106,7 @@ fix. This is the list on 2026-11-16, every entry reproduced, not inferred:
 | --- | --- | --- | --- | --- | --- | --- |
 | veraPDF corpus, `PDF_A-2b` and `PDF_A-4` at `bb75f4f` | 1,471 | 1,471 | 0 | 0 | 0 | 0 |
 | pdf.js `test/pdfs` at `v6.4.299` | 987 | 977 | 4 | 6 | 0 | 0 |
-| synthesized hostile documents | 4 | 0 | 0 | 3 | 1 | 0 |
+| synthesized hostile documents, before the fixes | 4 | 0 | 0 | 3 | 1 | 0 |
 
 The six pdf.js faults are the three defects above. A sample of the pre-flight measurement (the first 60
 files of `PDF_A-2b` and of `PDF_A-4`) wrote 108 results, refused 9 non-conforming inputs and refused 3 that
