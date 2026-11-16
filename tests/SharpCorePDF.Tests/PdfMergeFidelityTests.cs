@@ -79,6 +79,32 @@ public sealed class PdfMergeFidelityTests
             warning => warning.Kind == PdfWarningKind.PageSizeAssumed && warning.Message.Contains("page 1 ", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A media box whose digits overflow a double reads as infinite, which is no size a page can have; the page is
+    /// described as A4 with a remark, as one with no media box is, instead of the read throwing — a crash the
+    /// <c>document</c> fuzz target found.
+    /// </summary>
+    [Fact]
+    public async Task Assumes_a_size_for_a_page_whose_media_box_overflows()
+    {
+        var builder = new PdfBuilder();
+        var catalog = builder.Reserve();
+        var pages = builder.Reserve();
+        var huge = "1" + new string('0', 400);
+
+        builder.Add($"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {huge} {huge}] >>");
+        builder.Set(catalog, "<< /Type /Catalog /Pages 2 0 R >>");
+        builder.Set(pages, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+
+        using var destination = new MemoryStream();
+        var result = await Merger().MergeAsync(
+            MergePlan.Create().AddSource(PdfSource.Create(new PdfByteArraySource(builder.Build(catalog), "overflow.pdf"))),
+            destination,
+            Token);
+
+        Assert.Contains(result.Warnings, warning => warning.Kind == PdfWarningKind.PageSizeAssumed);
+    }
+
     /// <summary>A page that states its own media box keeps it, and no size is assumed for it.</summary>
     [Fact]
     public async Task Keeps_the_media_box_a_page_states()

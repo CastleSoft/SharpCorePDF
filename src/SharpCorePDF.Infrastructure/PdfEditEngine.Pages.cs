@@ -687,7 +687,7 @@ public sealed partial class PdfEditEngine
     private static double? ReadNumber(PdfFileReader reader, PdfObject? value) => reader.Resolve(value) switch
     {
         PdfInteger integer => integer.Value,
-        PdfReal real => real.Value,
+        PdfReal real when double.IsFinite(real.Value) => real.Value,
         _ => null,
     };
 

@@ -265,7 +265,7 @@ jobs:
             --corpus "$RUNNER_TEMP/verapdf-corpus" \
             --probe ./tools/SharpCorePDF.Validation/bin/Release/net11.0/SharpCorePDF.Validation.dll \
             --verapdf "$VERAPDF_INSTALL/verapdf" \
-            --report artifacts/preflight.json
+            --max-false-success 229             --report artifacts/preflight.json
 
       - name: Upload the report
         if: always()

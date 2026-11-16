@@ -42,6 +42,11 @@ against an empty feed.
 
 ### Fixed
 
+- **A media box whose digits overflow a double no longer crashes a read or an edit.** A number too large for a
+  double reads as infinite, and three readers passed it to a constructor that refuses it, so the `document` fuzz
+  target found a 378-byte file that threw `ArgumentOutOfRangeException` from the inspection, the page reader and
+  the edit engine. Such a box is now taken as unreadable, and the page is described as A4 with a remark, as one
+  with no box is.
 - **A hybrid-reference file is read.** Its classic table lists the objects it keeps in object streams as free, so
   a reader that knows no streams skips them, and describes them in the stream the trailer's `/XRefStm` names. The
   table kept the first entry it met, so the free entry hid the one in the stream, and such a file read as having

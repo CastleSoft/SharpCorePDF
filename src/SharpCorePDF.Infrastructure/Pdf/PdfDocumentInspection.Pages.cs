@@ -69,7 +69,9 @@ internal static partial class PdfDocumentInspection
         var width = Math.Abs(x2 - x1);
         var height = Math.Abs(y2 - y1);
 
-        return width > 0d && height > 0d ? PdfPageSize.FromPoints(width, height) : null;
+        return double.IsFinite(width) && width > 0d && double.IsFinite(height) && height > 0d
+            ? PdfPageSize.FromPoints(width, height)
+            : null;
     }
 
     /// <summary>Reads the rotation a page declares or inherits, as the nearest quarter turn.</summary>

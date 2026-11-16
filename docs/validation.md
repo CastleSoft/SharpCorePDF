@@ -109,6 +109,7 @@ Fixed since the list was first drawn up, each with the test that fails without i
 | A merge copied the outline recursively, so a source nested about fifty thousand levels deep overflowed the stack; a looping or shared outline was walked again at every visit — a crash the `document` fuzz target found | the walk stops at 256 levels with `BookmarksTruncated`; a bookmark reached twice is copied once with `BookmarkSkipped` | `PdfMergeOutlineLimitsTests` |
 | Rebuilding a table sliced the document at offsets the damaged table stated past its end, or beyond an index's range, and threw `ArgumentOutOfRangeException` — a crash the `document` fuzz target found | an offset outside the document is passed over, and the rebuild finds the catalog | `PdfReaderRecoveryTests.Rebuilds_a_table_that_states_an_offset_past_the_end_of_the_file` |
 | Copying an attachment the listing reported, whose specification embeds no stream, threw `ArgumentException` — the public-corpora job's fault on `isartor-6-1-11-t01-fail-a.pdf` | it writes no bytes, matching the `ByteLength` of zero the listing reports | `PdfContentReaderTests.Copies_nothing_for_a_listed_file_that_embeds_no_stream` |
+| A media box whose digits overflow a double read as infinite, and the inspection, the page reader and the edit engine passed it to a constructor that refuses it — a 378-byte crash the `document` fuzz target found on the first Robustness run of this branch | a number that is not finite is unreadable, so the page is described as A4 with a remark, as one with no box is | `PdfMergeFidelityTests.Assumes_a_size_for_a_page_whose_media_box_overflows`, `PdfDocumentEditorTests.Edits_a_page_whose_media_box_overflows` |
 | A hybrid-reference file read as having no pages: its classic table lists the objects it keeps in object streams as free, and the free entry hid the real one in `/XRefStm` | the stream may answer for the numbers its own section's table frees, and is read before the revision `/Prev` points at | `PdfCrossReferencePrecedenceTests.Reads_an_object_a_hybrid_file_lists_as_free_in_its_table_and_describes_in_its_stream`, `.Reads_the_stream_of_a_hybrid_section_before_the_revision_it_follows` |
 | An object stream answered for numbers the table places elsewhere: an object a later revision rewrote came back stale, and one it freed came back from the dead, depending on which object was resolved first | only the numbers the table places in a stream are taken from it, and the table is consulted before any cache | `.Resolves_the_object_the_table_names_not_the_copy_an_object_stream_still_holds`, `.Does_not_bring_back_an_object_the_table_lists_as_free` |
 | A page that paints forms without end — six levels of forms, each painting the next 40 times, from a 3.6 KB document — never finished reading | `PdfEngineOptions.MaxFormPaintsPerPage` (100,000) and a per-page budget of 256 MiB of decoded form content, with a per-page cache | `PdfFormBudgetTests` |
@@ -155,8 +156,14 @@ output intent with sRGB. By profile: 1b 48, 2b 169, 2u 9, 4 169, 3b 0.
 | Fonts: `6.2.10.x` (part 4), `6.2.11.x` (part 2) | 88 | not looked at |
 | The rest: output intent profile `6.2.3` (18), integers beyond 32 bits `6.1.13` (15), operators `6.2.2` (15), `6.1.12` (13), `Alternates`/`OPI`/reference XObjects `6.2.7` to `6.2.9` (26), strings, metadata | 112 | not looked at, except `6.2.2` |
 
-**After**, the ten clause groups that were changed, converted and judged locally with the same veraPDF
-(150 fail-inputs and 51 pass-inputs of `PDF_A-2b`):
+**After**, on the same corpus and the same veraPDF (`robustness.yml` run on `a23fdc3`, 2,074 files): 229 false
+successes, of which 227 were sources meant to fail and 2 sources that conformed (`6-6-2-3-2-t01-pass-b` and
+`-d`, whose metadata extension schemas the conversion rewrites). By profile: 1b 33, 2b 95, 2u 9, 4 92, 3b 0. The
+remaining 229 are mostly rules the analysis does not read: fonts `6.2.11` (43) and `6.2.10` (38), colour `6.2.4`
+(34), integers `6.1.13` (15), `6.1.12` (13), `6.2.8` (13).
+
+The ten clause groups that were changed, converted and judged locally file by file (150 fail-inputs and 51
+pass-inputs of `PDF_A-2b`):
 
 | | Refused | Conforms | Still fails |
 | --- | --- | --- | --- |
@@ -170,8 +177,9 @@ the analysis does not read (`6.2.2-2`, `6.2.5-6`, `6.2.6-1`, `6.5.1-1`); they ar
 clause. The three conforming sources refused are over-refusals: their colour use is allowed by an intent or a
 `Default` space the analysis does not read.
 
-`robustness.yml` repeats the full measurement weekly. Its `--max-false-success` is the ratchet: the run fails when the
-count of false successes rises above the figure measured on the commit that set it.
+`robustness.yml` repeats the full measurement weekly. Its `--max-false-success` is the ratchet, set to 229, the
+figure above: the run fails when the count of false successes rises above it. Lower it in the change that lowers
+the count.
 
 ## How the checks were calibrated
 
