@@ -109,6 +109,21 @@ Fixed since the list was first drawn up, each with the test that fails without i
 | A merge copied the outline recursively, so a source nested about fifty thousand levels deep overflowed the stack; a looping or shared outline was walked again at every visit — a crash the `document` fuzz target found | the walk stops at 256 levels with `BookmarksTruncated`; a bookmark reached twice is copied once with `BookmarkSkipped` | `PdfMergeOutlineLimitsTests` |
 | Rebuilding a table sliced the document at offsets the damaged table stated past its end, or beyond an index's range, and threw `ArgumentOutOfRangeException` — a crash the `document` fuzz target found | an offset outside the document is passed over, and the rebuild finds the catalog | `PdfReaderRecoveryTests.Rebuilds_a_table_that_states_an_offset_past_the_end_of_the_file` |
 | Copying an attachment the listing reported, whose specification embeds no stream, threw `ArgumentException` — the public-corpora job's fault on `isartor-6-1-11-t01-fail-a.pdf` | it writes no bytes, matching the `ByteLength` of zero the listing reports | `PdfContentReaderTests.Copies_nothing_for_a_listed_file_that_embeds_no_stream` |
+| A hybrid-reference file read as having no pages: its classic table lists the objects it keeps in object streams as free, and the free entry hid the real one in `/XRefStm` | the stream may answer for the numbers its own section's table frees, and is read before the revision `/Prev` points at | `PdfCrossReferencePrecedenceTests.Reads_an_object_a_hybrid_file_lists_as_free_in_its_table_and_describes_in_its_stream`, `.Reads_the_stream_of_a_hybrid_section_before_the_revision_it_follows` |
+| An object stream answered for numbers the table places elsewhere: an object a later revision rewrote came back stale, and one it freed came back from the dead, depending on which object was resolved first | only the numbers the table places in a stream are taken from it, and the table is consulted before any cache | `.Resolves_the_object_the_table_names_not_the_copy_an_object_stream_still_holds`, `.Does_not_bring_back_an_object_the_table_lists_as_free` |
+| A page that paints forms without end — six levels of forms, each painting the next 40 times, from a 3.6 KB document — never finished reading | `PdfEngineOptions.MaxFormPaintsPerPage` (100,000) and a per-page budget of 256 MiB of decoded form content, with a per-page cache | `PdfFormBudgetTests` |
+| A check box or radio button's appearance stream had no `/Resources`, which the Arlington model of PDF 1.7 and later requires | the entry is stated, empty when the button draws no text | `PdfFormEditorTests.States_resources_on_the_appearance_of_a_button_that_draws_no_text` |
+| The PDF/A conversion wrote documents that broke rules its analysis never looked at: annotation flags and types, the actions of widgets, fields, bookmarks and `/Next` chains, XFA, device colour under a mismatched output intent, undefined operators, graphics-state keys | see [the section below](#the-pdfa-conversion-against-the-verapdf-corpus) and chapter 24 | `PdfAArchivalChecksTests` (32 tests, 21 of which fail on the previous analysis) |
+
+## Known limits
+
+What the checks show and nothing here fixes, stated so that no claim goes further than the evidence:
+
+| Limit | Where it shows | What a caller does |
+| --- | --- | --- |
+| A document that declares PDF 2.0 and draws with one of the 14 standard fonts omits `/FirstChar`, `/LastChar`, `/Widths` and `/FontDescriptor`, which PDF 2.0 withdrew the exemption from | the Arlington check, `FontType1-*-11` on `report.pdf`; accepted in `validation.yml` with the reason beside it | embed a font, or write the document as PDF 1.7 |
+| The PDF/A conversion does not read every rule of ISO 19005: `Separation` and `DeviceN` colorant consistency (`6.2.4.4`), the font rules (`6.2.10` and `6.2.11`: `CIDToGIDMap`, `CIDSystemInfo`, embedded CMaps, widths, encodings, `.notdef`), rendering intent values (`6.2.6`), a halftone's transfer function (`6.2.5-6`), undefined operators inside Type 3 glyph procedures, metadata extension schemas (`6.6.2.3`), odd-length hexadecimal strings and integers beyond 32 bits (`6.1.5`, `6.1.13`), and the `Alternates`, `OPI` and reference-XObject keys (`6.2.7` to `6.2.9`) | the preflight measurement below, which lists them by clause | judge the result with veraPDF; the library says so in `PdfAProfileWritten` |
+| A source whose own output intent is not a usable ICC profile, or whose content paints in a space no intent covers, is refused rather than converted | `PdfAConversionResult.UnsatisfiedRequirements` | supply an `OutputIntent` the content was prepared for |
 
 ## Corpus readings, 2026-11-16
 
@@ -119,9 +134,44 @@ Fixed since the list was first drawn up, each with the test that fails without i
 | synthesized hostile documents, before the fixes | 4 | 0 | 0 | 3 | 1 | 0 |
 
 The six pdf.js faults were the empty-name, upside-down glyph and date-offset defects in the fixed table;
-after those fixes all six are read, as is `jpeg-selector.pdf`. A sample of the pre-flight measurement (the first 60
-files of `PDF_A-2b` and of `PDF_A-4`) wrote 108 results, refused 9 non-conforming inputs and refused 3 that
-already conformed; whether the 108 conform is veraPDF's to say, which `robustness.yml` asks.
+after those fixes all six are read, as is `jpeg-selector.pdf`.
+
+## The PDF/A conversion against the veraPDF corpus
+
+`validate-preflight-corpus.py` converts every file of the veraPDF corpus for its profile and asks veraPDF 1.30.4
+whether the result conforms. Each file breaks one clause (`-fail-`) or passes one (`-pass-`), so the answer
+separates three things: a conversion that writes a file veraPDF rejects (a *false success*), one that
+refuses a source that already conformed (an *over-refusal*), and one that damages a conforming source.
+
+**Before** (`robustness.yml` on `f529b02`, 2,074 files, five profiles): 395 false successes, of which 378 were
+sources meant to fail and 17 were sources that conformed — the converter damaged them, chiefly by replacing a CMYK
+output intent with sRGB. By profile: 1b 48, 2b 169, 2u 9, 4 169, 3b 0.
+
+| Clause group | False successes | What veraPDF found |
+| --- | --- | --- |
+| Colour: `6.1.7`, `6.2.4.x`, `6.2.5`, `6.2.10` (transparency, part 2) | 88 | chiefly `6.2.4.3-3`: DeviceCMYK used with no CMYK output intent |
+| Annotations and forms: `6.3.x`, `6.4.x` | 79 | `/F` missing (`6.3.2-1`), types the profile does not list, actions on widgets and fields, XFA |
+| Actions: `6.5.x`, `6.6.1`, `6.6.3` | 28 | forbidden actions along `/Next` chains and on bookmarks; named actions |
+| Fonts: `6.2.10.x` (part 4), `6.2.11.x` (part 2) | 88 | not looked at |
+| The rest: output intent profile `6.2.3` (18), integers beyond 32 bits `6.1.13` (15), operators `6.2.2` (15), `6.1.12` (13), `Alternates`/`OPI`/reference XObjects `6.2.7` to `6.2.9` (26), strings, metadata | 112 | not looked at, except `6.2.2` |
+
+**After**, the ten clause groups that were changed, converted and judged locally with the same veraPDF
+(150 fail-inputs and 51 pass-inputs of `PDF_A-2b`):
+
+| | Refused | Conforms | Still fails |
+| --- | --- | --- | --- |
+| Inputs meant to fail (150) | 48 | 76 | 26 |
+| Inputs meant to pass (51) | 3 | 39 | **0** |
+
+No conforming source is damaged any more, which is the defect that mattered most: a caller who archives a
+document that already conformed is told so by the result, not given a file that no longer does. The 26 inputs that
+still fail break `6.2.4.4-1/-2` (colorant consistency, 7), the remaining `6.2.4.3` shapes (14), and a few single rules
+the analysis does not read (`6.2.2-2`, `6.2.5-6`, `6.2.6-1`, `6.5.1-1`); they are the known limits above, by
+clause. The three conforming sources refused are over-refusals: their colour use is allowed by an intent or a
+`Default` space the analysis does not read.
+
+`robustness.yml` repeats the full measurement weekly. Its `--max-false-success` is the ratchet: the run fails when the
+count of false successes rises above the figure measured on the commit that set it.
 
 ## How the checks were calibrated
 
@@ -147,9 +197,11 @@ A check that never fails proves nothing, so each was shown to fail on purpose be
   path (`SCPDF_FUZZ_TARGET=dct dotnet SharpCorePDF.Validation.dll <file>`), with the stack ending in
   `JpegDecoder.DecodeBlock`; the seeds of `document`, `dct` and `ccitt` run clean.
 
-## What has not been run here
+## What runs where
 
-The Arlington check (#4) and the judged half of the pre-flight measurement (#7) need the Arlington service
-and veraPDF, and the fuzzing (#1) needs Linux; they were written against the documented interfaces and run
-first on a runner. Both report-only checks say so in their workflow, with what to change once the first run
-has set the baseline.
+On a Windows workstation the checks that need only Python, Node, .NET and a portable JRE run in a minute or
+two, and veraPDF installs without a system change (`jdk-17` and `verapdf-greenfield-1.30.4` unpacked into a
+scratch directory), which is how the per-clause measurement above was taken file by file. Two things do not run
+there: libFuzzer, which needs Linux, and the Arlington service, which needs a Docker daemon. Both run in
+`robustness.yml` and `validation.yml`, where the Arlington check is blocking and its accepted rules are listed
+beside the step with the reason for each.

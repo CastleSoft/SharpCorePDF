@@ -25,6 +25,7 @@ can be shown to see each class and a fix can be shown to close it:
   flate-bomb.pdf      a 1 MB content stream that inflates past 1 GiB: no limit on decoded size
   objstm-count.pdf    an object stream that declares 2^31-1 objects: an allocation sized by /N
   jpeg-selector.pdf   a JPEG scan that selects Huffman table 4 of 0-3: an unchecked table index
+  form-fanout.pdf     six levels of forms, each painting the next 40 times: 40^6 paints from one page
 
 --report <file.json> writes every outcome, with the first line of what the probe said, for the run's artefacts.
 """
@@ -137,7 +138,32 @@ def synthesize(directory: Path) -> None:
         image,
     ]))
 
-    print(f"wrote 4 hostile documents to {directory}")
+    # Every form paints the next one forty times, six levels down: the forms are small and none is cyclic, so
+    # the depth limit and the cycle guard both pass, and the page asks for 40^6 paints of content that is
+    # decoded and scanned again on every one of them.
+    levels = 6
+    forms = []
+
+    for level in range(levels):
+        if level < levels - 1:
+            body = (b"q /F%d Do Q\n" % (level + 1)) * 40
+            resources = b"<< /XObject << /F%d %d 0 R >> >>" % (level + 1, 6 + level)
+        else:
+            body = b"0 0 m 1 1 l S\n"
+            resources = b"<< >>"
+
+        forms.append(b"<< /Type /XObject /Subtype /Form /BBox [0 0 10 10] /Resources %s /Length %d >>\nstream\n%s\nendstream"
+                     % (resources, len(body), body))
+
+    page_content = b"/F0 Do"
+    (directory / "form-fanout.pdf").write_bytes(document([
+        head[0], head[1],
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /XObject << /F0 5 0 R >> >> /Contents 4 0 R >>",
+        b"<< /Length %d >>\nstream\n%s\nendstream" % (len(page_content), page_content),
+        *forms,
+    ]))
+
+    print(f"wrote 5 hostile documents to {directory}")
 
 
 def main() -> None:

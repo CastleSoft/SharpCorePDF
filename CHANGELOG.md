@@ -35,8 +35,41 @@ against an empty feed.
 
 - **`PdfEngineOptions.MaxDecodedStreamBytes`** (128 MiB by default) bounds what one stream may decode to.
   `MaxSourceBytes` bounds the input only, and Flate reaches about a thousand to one.
+- **`PdfEngineOptions.MaxFormPaintsPerPage`** (100,000 by default) bounds how many times one page may paint a
+  form XObject, across every level of forms inside forms; a page that reaches it is read as far as it got, with a
+  `PdfWarningKind.FormPaintLimitExceeded` remark. `PdfWarningKind.PdfAFeatureRepaired` reports an entry a PDF/A
+  conversion set right in the copy.
 
 ### Fixed
+
+- **A hybrid-reference file is read.** Its classic table lists the objects it keeps in object streams as free, so
+  a reader that knows no streams skips them, and describes them in the stream the trailer's `/XRefStm` names. The
+  table kept the first entry it met, so the free entry hid the one in the stream, and such a file read as having
+  no pages. The stream may now answer for the numbers its own section's table frees, and is read before the
+  revision `/Prev` points at, as ISO 32000-1 7.5.8.4 orders them.
+- **An object stream no longer answers for an object the table places elsewhere.** A stream still holds the
+  copies it held when it was written, and loading it to resolve one object cached every object inside it: an
+  object a later revision rewrote in the file body came back stale, and one a later revision freed came back
+  from the dead, depending on which object was resolved first. Only the numbers the table places in a stream
+  are taken from it, and the table is consulted before any cache.
+- **A page that paints forms without end is read up to a budget.** A form that paints the next form forty times,
+  six levels down, is under the depth limit and the guard against a form that paints itself, and asked a
+  3.6 KB document for four billion paints: the read did not finish. Both the text walk and the image walk
+  now count the paints of a page against `MaxFormPaintsPerPage`, and the form content of a page against 256 MiB, and
+  keep a small per-page cache so a form painted again is not decoded again.
+- **Form field appearances state `/Resources`.** A check box or radio button draws no text, names no font, and
+  its appearance stream had no `/Resources`; the Arlington model of PDF 1.7 and later requires the entry.
+- **The PDF/A conversion sets right, removes, or refuses more of what the profiles name.** The analysis
+  never looked at a content stream, a bookmark, an annotation's flags or a form's actions; the veraPDF test
+  corpus, converted and judged by veraPDF 1.30.4, showed it writing documents that still broke the rule. Now:
+  an annotation's Print flag is set when it is missing (`PdfAFeatureRepaired`); a hidden annotation and a type the
+  profile does not list are refused; a widget's and a field's actions, and an XFA form, are dropped; a forbidden
+  action is found along `/Next` chains and on bookmarks, pages and the open action, and the forbidden set is the
+  one the profiles list (`SubmitForm` is permitted, `ResetForm`, `Hide`, `SetOCGState`, `Trans`, `GoTo3DView`,
+  `SetState` and `NoOp` are not; a named action must be one of four); content that paints in `DeviceCMYK`, through a
+  `Separation` or `DeviceN` alternate included, under an RGB intent, an operator ISO 32000 does not define, and
+  the graphics-state keys the profiles forbid are refused; and a source that already states a usable
+  `GTS_PDFA1` output intent keeps it instead of being re-labelled sRGB. `docs/validation.md` has the measurement.
 
 - **Security: signature wrapping.** The validator required only that the byte range start at 0 and end at the
   end of the file, so bytes written into the unsigned gap could close the signature value early and add

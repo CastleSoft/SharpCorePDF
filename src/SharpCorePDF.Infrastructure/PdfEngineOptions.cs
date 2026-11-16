@@ -36,6 +36,20 @@ public sealed record PdfEngineOptions
     /// </remarks>
     public long MaxDecodedStreamBytes { get; init; } = 128L * 1024 * 1024;
 
+    /// <summary>
+    /// Gets the largest number of times the content of one page may paint a form XObject, counted across every
+    /// level of forms inside forms. Past it the rest of the page is not read, and a
+    /// <see cref="Domain.ValueObjects.PdfWarningKind.FormPaintLimitExceeded"/> remark says so.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="MaxNestingDepth"/> and the guard against a form that paints itself bound how deep a page goes
+    /// and not how much it does: a form that paints the next form forty times, six levels down, is under both and
+    /// asks for four billion paints from a document of a few kilobytes. The default of 100,000 is far above what a
+    /// page that draws something needs. Alongside it, the forms of one page are read for at most 256 MiB of
+    /// decoded content, which bounds a page whose few paints are of very large forms.
+    /// </remarks>
+    public int MaxFormPaintsPerPage { get; init; } = 100_000;
+
     /// <summary>Gets the maximum nesting depth of dictionaries and arrays.</summary>
     public int MaxNestingDepth { get; init; } = 64;
 
@@ -95,6 +109,11 @@ public sealed record PdfEngineOptions
         if (MaxDecodedStreamBytes < 1024 || MaxDecodedStreamBytes > Array.MaxLength)
         {
             errors.Add($"MaxDecodedStreamBytes must be between 1024 and {Array.MaxLength}, but is {MaxDecodedStreamBytes}.");
+        }
+
+        if (MaxFormPaintsPerPage < 1)
+        {
+            errors.Add($"MaxFormPaintsPerPage must be at least 1, but is {MaxFormPaintsPerPage}.");
         }
 
         if (MaxNestingDepth is < 4 or > 1024)

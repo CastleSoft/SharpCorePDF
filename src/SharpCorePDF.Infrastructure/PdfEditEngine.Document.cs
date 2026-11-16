@@ -129,6 +129,10 @@ public sealed partial class PdfEditEngine
             // flag that asks it to build appearances itself is cleared rather than copied.
             var form = (PdfDictionary)copier.Clone(sourceForm);
             form.Set("NeedAppearances", PdfBoolean.False);
+
+            // An XFA form is a program a reader runs to build the form; the archival copy has to be painted
+            // from the appearances the widgets already carry.
+            form.Remove("XFA");
             catalog.Set("AcroForm", form);
         }
 

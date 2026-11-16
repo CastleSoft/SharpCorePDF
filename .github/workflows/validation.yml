@@ -134,9 +134,10 @@ jobs:
             dotnet "$tool" replay "$target" "$seeds/$target"
           done
 
-      # Each of the four documents reaches a failure class a review named, and each is now read: the decode
-      # limit, the length-chain bound, the /N bound and the JPEG scan-header checks closed them. A document
-      # that faults here again is a regression, so none is listed as known.
+      # Each of the five documents reaches a failure class a review named, and each is now read: the decode
+      # limit, the length-chain bound, the /N bound, the JPEG scan-header checks and the form-paint budget
+      # closed them. A document that faults or does not finish here again is a regression, so none is listed
+      # as known.
       - name: Hostile documents
         run: |
           set -euo pipefail
@@ -162,10 +163,8 @@ jobs:
     name: Arlington PDF Model
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # The service's report format and the writer's baseline are confirmed by the first run on a runner; until
-    # then the job reports without blocking. Remove continue-on-error and pass --strict with the --accept list
-    # that run establishes.
-    continue-on-error: true
+    # Blocking: a rule the model finds that is not in the accept list below fails the run. The list is the
+    # baseline the first runs established, and every entry says why it is accepted.
 
     services:
       arlington:
@@ -201,9 +200,23 @@ jobs:
           echo "::error::the Arlington service did not answer on port 8080"
           exit 1
 
+      # Accepted, and why:
+      #   DocInfo-Title/Author/Producer-5, FontDescriptorCIDType2-CIDSet-5
+      #       deprecated in PDF 2.0, not forbidden: the library still writes the document information dictionary
+      #       and a /CIDSet because readers and PDF/A-1 and -2 profiles use them; a 2.0 document that carries
+      #       them is still readable and still conforms (veraPDF passes archive-4.pdf).
+      #   FontType1-FirstChar/LastChar/Widths/FontDescriptor-11
+      #       PDF 2.0 withdrew the exemption of the 14 standard fonts, so a document that declares version 2.0 and
+      #       draws with Helvetica has to describe it. The writer lets the caller choose the version and does not
+      #       add descriptors for standard fonts; a 2.0 document that needs to satisfy the model embeds its font.
+      #       Recorded in docs/validation.md as a limit, not hidden.
       - name: Check against the model
         run: |
-          python3 docs/tools/validate-arlington.py --report-dir artifacts/arlington \
+          python3 docs/tools/validate-arlington.py --strict --report-dir artifacts/arlington \
+            --accept DocInfo-Title-5 --accept DocInfo-Author-5 --accept DocInfo-Producer-5 \
+            --accept FontDescriptorCIDType2-CIDSet-5 \
+            --accept FontType1-FirstChar-11 --accept FontType1-LastChar-11 \
+            --accept FontType1-Widths-11 --accept FontType1-FontDescriptor-11 \
             --exclude protected.pdf \
             "$RUNNER_TEMP/SharpCorePDF.Examples/output" \
             "$RUNNER_TEMP/corpus/text-standard.pdf" "$RUNNER_TEMP/corpus/text-embedded.pdf" \

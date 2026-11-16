@@ -136,7 +136,7 @@ public sealed partial class PdfEditEngine : IPdfEditEngine
         {
             // The analysis is what keeps a refusal honest: a document that cannot be made conformant is
             // stopped here, before the writer exists and before a byte reaches the destination.
-            var requirements = PdfARequirements.Analyze(reader, archival);
+            var requirements = PdfARequirements.Analyze(reader, archival, plan.Output.OutputIntent?.NumberOfComponents ?? 3);
 
             if (requirements.Unsatisfied.Count > 0)
             {
@@ -152,6 +152,11 @@ public sealed partial class PdfEditEngine : IPdfEditEngine
                 warnings.Add(new(
                     PdfWarningKind.PdfAFeatureRemoved,
                     $"'{sourceName}': {removal} was removed because {PdfAProfileRules.Name(archival)} forbids it."));
+            }
+
+            foreach (var repair in requirements.Repairable ?? [])
+            {
+                warnings.Add(new(PdfWarningKind.PdfAFeatureRepaired, $"'{sourceName}': {repair}"));
             }
         }
 
@@ -274,6 +279,13 @@ public sealed partial class PdfEditEngine : IPdfEditEngine
         // The form is written before the pages: a page names the widgets that stand on it, and a
         // flattened field adds a stream and a resource the page dictionary has to carry.
         var acroForm = WriteForm(reader, sources.CopierOf(reader), writer, layout, form, warnings);
+
+        if (profile is { } archivalProfile)
+        {
+            // The rewrite that makes each annotation and field state what the profile requires has to be
+            // registered before the objects are copied: they are written when the pages name them.
+            PdfAAnnotationRules.Register(reader, sources.CopierOf(reader), archivalProfile);
+        }
 
         WritePages(sources, writer, pagesNodeNumber, layout, new AnnotationContext(writer, modificationDate), warnings);
 
