@@ -439,7 +439,7 @@ public sealed partial class PdfEditEngine
         public PdfOverlayLayer Layer { get; } = layer;
 
         /// <summary>Gets the rotation the layer page declares, which the form is placed with.</summary>
-        public PageRotation Rotation { get; } = ReadRotation(page);
+        public PageRotation Rotation { get; } = ReadRotation(reader, page);
 
         /// <summary>Gets or sets the object number of the form XObject, or zero before it is written.</summary>
         public int FormNumber { get; set; }

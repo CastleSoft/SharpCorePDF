@@ -170,7 +170,11 @@ internal static class PdfImageFilters
                     await InflateToAsync(stream.Raw, destination, cancellationToken).ConfigureAwait(false);
                 }
             }
-            catch (InvalidDataException exception)
+            // The decompressor reports most damage as InvalidDataException and some as ZLibException, an
+            // IOException the runtime does not make public, so it is recognised by name: the destination's own
+            // IOException is the caller's, and is not turned into a verdict on the document.
+            catch (Exception exception) when (exception is InvalidDataException
+                || exception.GetType().FullName == "System.IO.Compression.ZLibException")
             {
                 throw new PdfSourceFormatException(
                     sourceName,

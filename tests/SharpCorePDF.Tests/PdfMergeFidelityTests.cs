@@ -93,6 +93,32 @@ public sealed class PdfMergeFidelityTests
         Assert.DoesNotContain(result.Warnings, warning => warning.Kind == PdfWarningKind.PageSizeAssumed);
     }
 
+    /// <summary>
+    /// A page whose <c>/Rotate</c> is not a multiple of 90 — which ISO 32000-1 requires it to be — is edited
+    /// with the nearest quarter turn, the rotation the inspection already reports for it; the edit engine used
+    /// to throw <see cref="ArgumentOutOfRangeException"/> for it (found by the <c>document</c> fuzz target).
+    /// </summary>
+    /// <param name="declared">The rotation the page declares.</param>
+    /// <param name="expected">The rotation the edited page carries.</param>
+    [Theory]
+    [InlineData("91", 90)]
+    [InlineData("-91", 270)]
+    [InlineData("44", 0)]
+    [InlineData("180.4", 180)]
+    [InlineData("99999999999", 270)]
+    public async Task Edits_a_page_whose_rotation_is_not_a_quarter_turn(string declared, int expected)
+    {
+        var editor = new PdfDocumentEditorService(new PdfDocumentReader(), new PdfEditEngine());
+        var edited = await editor.ApplyToArrayAsync(
+            new PdfByteArraySource(Page($"/Rotate {declared}"), "rotated.pdf"),
+            PdfEditPlan.Create().SetMetadata(new PdfMetadata { Title = "rotated" }),
+            cancellationToken: Token);
+
+        var rotate = new PdfFileReader(edited, "edited.pdf", PdfEngineOptions.Default).Pages[0].Dictionary.GetInteger("Rotate") ?? 0;
+
+        Assert.Equal(expected, rotate);
+    }
+
     private static PdfMergerService Merger() => new(new PdfDocumentReader(), new PdfMergeEngine());
 
     private static byte[] Page(string entries)

@@ -17,18 +17,23 @@ public sealed partial class PdfContentReaderTests
     /// <summary>
     /// The copy route of an image whose Flate data is damaged refuses it with the contract's exception, whether a
     /// predictor is declared or not: the decompressor's own exception used to reach the caller as if the library
-    /// had failed.
+    /// had failed. The decompressor reports damage as <see cref="InvalidDataException"/> or, for some inputs —
+    /// the second data, found by the <c>flate</c> fuzz target — as a <c>ZLibException</c>, an
+    /// <see cref="IOException"/>; both are refused.
     /// </summary>
     /// <param name="parameters">The decode parameters the image declares.</param>
+    /// <param name="data">The damaged Flate data, as hexadecimal.</param>
     [Theory]
-    [InlineData("/DecodeParms << /Predictor 12 /Colors 1 /BitsPerComponent 8 /Columns 4 >>")]
-    [InlineData("")]
-    public async Task Refuses_to_copy_an_image_whose_flate_data_is_damaged(string parameters)
+    [InlineData("/DecodeParms << /Predictor 12 /Colors 1 /BitsPerComponent 8 /Columns 4 >>", "789CFFFFFFFF000102030405")]
+    [InlineData("", "789CFFFFFFFF000102030405")]
+    [InlineData("/DecodeParms << /Predictor 12 /Colors 1 /BitsPerComponent 8 /Columns 4 >>", "08B85B00C3000040")]
+    [InlineData("", "08B85B00C3000040")]
+    public async Task Refuses_to_copy_an_image_whose_flate_data_is_damaged(string parameters, string data)
     {
         var builder = new PdfBuilder();
         var catalog = builder.Reserve();
         var pages = builder.Reserve();
-        var damaged = new byte[] { 0x78, 0x9C, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05 };
+        var damaged = Convert.FromHexString(data);
 
         builder.Add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>");
         builder.AddStream(string.Empty, "q 50 0 0 50 0 0 cm /Im0 Do Q"u8.ToArray());

@@ -366,7 +366,7 @@ public sealed partial class PdfEditEngine : IPdfEditEngine
             for (var index = 0; index < layout.Count; index++)
             {
                 var expected = layout[index].EffectiveRotation;
-                var actual = ReadRotation(reader.Pages[index]);
+                var actual = ReadRotation(reader, reader.Pages[index]);
 
                 if (actual != expected)
                 {

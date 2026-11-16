@@ -82,7 +82,12 @@ against an empty feed.
   read from a document is now written back from its own text. A real too large for the formatter's buffer no
   longer fails the write of the whole document (found by the `document` fuzz target in its first run).
 - **The image copy route refuses damaged Flate data with `PdfSourceFormatException`** instead of letting the
-  decompressor's `InvalidDataException` reach the caller (found by the `flate` fuzz target).
+  decompressor's `InvalidDataException`, or the `ZLibException` it throws for some inputs, reach the caller
+  (both found by the `flate` fuzz target).
+- **An edit reads a page's rotation the way the inspection does.** A `/Rotate` that is not a multiple of 90
+  made the edit engine throw `ArgumentOutOfRangeException` (found by the `document` fuzz target), and a real
+  or indirect `/Rotate` was read as no rotation at all. Both now take the nearest quarter turn, the rotation
+  the inspection already reported, and a value beyond the range of `int` is reduced instead of wrapped.
 - **Annotations satisfy the Arlington model.** A free text annotation states the `/DA` ISO 32000-1 requires,
   and every annotation appearance states its `/Resources` (found by the Arlington check in its first run).
 - **A cross-reference table whose offsets moved is rebuilt.** Bytes inserted or removed after a table was

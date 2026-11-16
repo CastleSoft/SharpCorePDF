@@ -72,7 +72,16 @@ internal static partial class PdfDocumentInspection
         return width > 0d && height > 0d ? PdfPageSize.FromPoints(width, height) : null;
     }
 
-    private static PageRotation ReadRotation(PdfFileReader reader, SourcePage page)
+    /// <summary>Reads the rotation a page declares or inherits, as the nearest quarter turn.</summary>
+    /// <param name="reader">The document.</param>
+    /// <param name="page">The page.</param>
+    /// <returns>The rotation; <see cref="PageRotation.None"/> when none is declared.</returns>
+    /// <remarks>
+    /// ISO 32000-1 requires a multiple of 90; a value that is not one, or that is a real or an indirect
+    /// object, is read the way other readers read it rather than refused. The inspection and the edit engine
+    /// both read it here, so an edit keeps the rotation the inspection reported.
+    /// </remarks>
+    internal static PageRotation ReadRotation(PdfFileReader reader, SourcePage page)
     {
         var value = ReadNumber(reader, page.Dictionary.Get("Rotate"))
             ?? ReadNumber(reader, page.Inherited.Get("Rotate"));
@@ -82,7 +91,10 @@ internal static partial class PdfDocumentInspection
             return PageRotation.None;
         }
 
-        var normalized = (((int)Math.Round(value.Value / 90d) * 90) % 360 + 360) % 360;
+        // The quarter turns are counted in floating point and reduced before they become an integer, so a
+        // declared value beyond the range of int is reduced rather than wrapped.
+        var quarterTurns = Math.Round(value.Value / 90d) % 4d;
+        var normalized = (((int)quarterTurns * 90) % 360 + 360) % 360;
 
         return normalized switch
         {

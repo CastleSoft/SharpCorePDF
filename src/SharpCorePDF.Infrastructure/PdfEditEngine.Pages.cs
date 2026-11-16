@@ -490,16 +490,11 @@ public sealed partial class PdfEditEngine
     }
 
     /// <summary>Reads the rotation a page declares, before any edit is applied.</summary>
+    /// <param name="reader">The document the page belongs to.</param>
     /// <param name="page">The page.</param>
     /// <returns>The normalised rotation.</returns>
-    private static PageRotation ReadRotation(SourcePage page)
-    {
-        var declared = page.Dictionary.GetInteger("Rotate")
-            ?? page.Inherited.GetInteger("Rotate")
-            ?? 0;
-
-        return PageRotationExtensions.Normalize((int)declared);
-    }
+    private static PageRotation ReadRotation(PdfFileReader reader, SourcePage page) =>
+        Pdf.PdfDocumentInspection.ReadRotation(reader, page);
 
     private static void EnsurePage(List<EditedPage> layout, int pageNumber, int index, string sourceName)
     {
@@ -1033,7 +1028,7 @@ public sealed partial class PdfEditEngine
         public int TargetNumber { get; set; }
 
         public PageRotation EffectiveRotation =>
-            PageRotationExtensions.Normalize(ReadRotation(Source).Degrees + AddedRotation.Degrees);
+            PageRotationExtensions.Normalize(ReadRotation(Reader, Source).Degrees + AddedRotation.Degrees);
 
         public EditedPage Copy()
         {
