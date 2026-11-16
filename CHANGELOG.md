@@ -55,6 +55,16 @@ against an empty feed.
   is measured from its header without being decoded — the same answer as before, without the allocation —
   and the working sizes are computed in 64 bits.
 
+- **A JPEG scan header is checked before it is used.** A Huffman table selector above 3, and a progressive
+  scan whose spectral selection runs past coefficient 63 or starts after it ends, indexed past the decoder's
+  tables (`IndexOutOfRangeException`); such a scan is now refused and the image reported undecodable.
+- **The empty name is a dictionary key like any other.** `/` on its own is a name PDF allows; four documents
+  of the pdf.js test corpus use it as a key and did not open at all (`ArgumentException`).
+- **A glyph drawn upside down has a box.** A negative font size made `PdfGlyph.BoundingBox` throw, so text
+  extraction faulted on the page.
+- **`PdfDate.TryParse` answers instead of throwing** for a time-zone offset beyond fourteen hours, which it
+  now reads as no offset; one malformed `/CreationDate` no longer fails the inspection of the document.
+
 ### Known defects, found by the new checks and not yet fixed
 
 Each is reproduced, pinned by a skipped test or a strict `--known-defect` flag that fails the run once the
@@ -63,10 +73,6 @@ defect is fixed, and listed in [`docs/validation.md`](docs/validation.md#known-d
 - An incremental update rewrites both elements of `/ID`, and appends a renumbered copy of the whole document
   rather than the objects it changed — which also rewrites the signature dictionary after signing.
 - A merge copies a page that states no `/MediaBox` without one.
-- Hostile input: a JPEG scan's Huffman table selector is not range-checked.
-- Real-world input (the pdf.js test corpus): an empty name as a dictionary key stops a document opening, a
-  glyph with an upside-down box faults text extraction, and `PdfDate.TryParse` throws on an out-of-range
-  time-zone offset instead of answering false.
 
 - **Run-length images are decoded.** `RunLengthDecode` joins Flate, LZW and the two ASCII filters: a
   bilevel or scan-style image that declares it now yields its samples — and `Gray8`, `Rgb24` or `Cmyk32`

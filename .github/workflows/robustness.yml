@@ -162,16 +162,11 @@ jobs:
       - name: Build the probe
         run: dotnet build ./tools/SharpCorePDF.Validation -c Release
 
-      # The six known files fault on three recorded defects (docs/validation.md): an empty name as a
-      # dictionary key (issue3188, issue5896, pdfjs_wikipedia, poppler-742-0-fuzzed), a glyph whose box is
-      # upside down (issue14415) and a date whose offset is beyond 14 hours (TAMReview).
       - name: Read every document
         run: |
           python3 docs/tools/corpus-robustness.py \
             --probe ./tools/SharpCorePDF.Validation/bin/Release/net11.0/SharpCorePDF.Validation.dll \
             --timeout 60 --heap-limit-mb 1024 --report artifacts/corpora.json \
-            --known issue3188.pdf --known issue5896.pdf --known pdfjs_wikipedia.pdf \
-            --known poppler-742-0-fuzzed.pdf --known issue14415.pdf --known TAMReview.pdf \
             "$RUNNER_TEMP/verapdf-corpus" "$RUNNER_TEMP/pdfjs/test/pdfs"
 
       - name: Upload the report

@@ -86,10 +86,6 @@ fix. This is the list on 2026-11-16, every entry reproduced, not inferred:
 | An incremental update writes a new identifier into both elements of `/ID`; ISO 32000-1 §14.4 keeps the first | #10 | `PdfIncrementalInvariantTests.Keeps_the_first_identifier_element_across_an_incremental_update` (skipped); `validate-incremental.py` `id-first` |
 | `UseIncrementalUpdate` appends a renumbered copy of the whole document rather than the objects it changed: every byte of the earlier revision is kept, but the file grows by its own size per edit, and the signature dictionary is written again after signing, so pyHanko places a signature followed by an edit as `CONTIGUOUS_BLOCK_FROM_START` with modification level `OTHER` instead of `ENTIRE_REVISION` | #10, #3 | `validate-incremental.py` `appends-only`; `validate-signatures.py` on `signed-then-edited.pdf` |
 | A merge copies a page that states no `/MediaBox` (and inherits none) without one, so the result breaks the rule that every page has a media box; qpdf repairs it by assuming Letter | #2 | `validate-pdf.py` on `inspected.pdf` and `with-warnings.pdf` (both merge a page of `NamedDests.pdf`) |
-| The JPEG decoder indexes its four Huffman tables with a scan's 4-bit selector unchecked | #12, #1 | `jpeg-selector.pdf`: `IndexOutOfRangeException` from `JpegDecoder.DecodeBlock` |
-| A dictionary key that is the empty name (`/` alone, which PDF syntax allows) makes `PdfDictionary.Set` throw `ArgumentException` while parsing, so the document does not open at all | #12 | pdf.js corpus: `issue3188.pdf`, `issue5896.pdf`, `pdfjs_wikipedia.pdf`, `poppler-742-0-fuzzed.pdf` |
-| A glyph whose box comes out upside down (a negative font size or a flipped font matrix) makes `PdfGlyph.BoundingBox` construct a `PdfRectangle` that throws, so text extraction faults | #12 | pdf.js corpus: `issue14415.pdf` |
-| `PdfDate.TryParse` throws `ArgumentOutOfRangeException` for a time-zone offset beyond 14 hours instead of answering false, so one malformed `/CreationDate` faults the whole inspection | #12 | pdf.js corpus: `TAMReview.pdf` |
 
 Fixed since the list was first drawn up, each with the test that fails without its fix:
 
@@ -99,6 +95,10 @@ Fixed since the list was first drawn up, each with the test that fails without i
 | No limit on the decoded size of a Flate, LZW or RunLength stream | `PdfEngineOptions.MaxDecodedStreamBytes` (128 MiB) | `PdfFilterTests.Refuses_a_flate_stream_that_decodes_past_the_limit` and its LZW, RunLength and content-stream companions |
 | A chain of indirect `/Length` references overflowed the stack | the chain is followed no deeper than `MaxNestingDepth`, then the stream is found by its `endstream` | `PdfReaderRecoveryTests.Reads_a_stream_whose_length_is_a_chain_of_sixty_thousand_streams` |
 | An object stream's `/N`, and a JPEG frame's width and height, sized allocations unchecked | `/N` is bounded by what the stream can hold; a JPEG above the caller's budget is measured from its header, and working sizes are computed in 64 bits | `PdfReaderRecoveryTests.Reads_an_object_stream_whose_count_its_header_cannot_hold`, `PdfJpegFilterTests.Measures_a_frame_too_large_for_the_budget_without_allocating_it` |
+| The JPEG decoder used a scan's 4-bit Huffman table selectors, and a progressive scan's spectral end, as indexes unchecked | `ParseScan` refuses a selector above 3, and a progressive scan whose selection is not `Ss ≤ Se ≤ 63` or whose approximation is above 13 | `PdfJpegFilterTests.Refuses_a_scan_that_selects_a_table_beyond_the_four_there_are`, `Refuses_a_progressive_scan_outside_the_block` |
+| The empty name as a dictionary key (`/` alone, which PDF allows) stopped the document opening | `PdfDictionary.Set` accepts it; the entry is kept and written back as `/` | `PdfObjectModelTests.Keeps_an_entry_whose_key_is_the_empty_name`, `Opens_a_document_that_uses_the_empty_name_as_a_key` |
+| A glyph drawn upside down (negative font size) faulted text extraction | `PdfGlyph.BoundingBox` takes the box between descender and ascender whichever way round | `PdfTextScannerTests.Gives_a_glyph_drawn_upside_down_a_box` |
+| `PdfDate.TryParse` threw for a time-zone offset beyond 14 hours | an offset no time zone has is read as no offset | `PdfSerializationTests.Reads_an_offset_no_time_zone_has_as_no_offset` |
 
 ## Corpus readings, 2026-11-16
 
@@ -108,7 +108,8 @@ Fixed since the list was first drawn up, each with the test that fails without i
 | pdf.js `test/pdfs` at `v6.4.299` | 987 | 977 | 4 | 6 | 0 | 0 |
 | synthesized hostile documents, before the fixes | 4 | 0 | 0 | 3 | 1 | 0 |
 
-The six pdf.js faults are the three defects above. A sample of the pre-flight measurement (the first 60
+The six pdf.js faults were the empty-name, upside-down glyph and date-offset defects in the fixed table;
+after those fixes all six are read, as is `jpeg-selector.pdf`. A sample of the pre-flight measurement (the first 60
 files of `PDF_A-2b` and of `PDF_A-4`) wrote 108 results, refused 9 non-conforming inputs and refused 3 that
 already conformed; whether the 108 conform is veraPDF's to say, which `robustness.yml` asks.
 

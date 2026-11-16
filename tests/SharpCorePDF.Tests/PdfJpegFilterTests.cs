@@ -35,6 +35,86 @@ public sealed class PdfJpegFilterTests
 
     private static string Fixture(string name) => Path.Combine(TestAssets.Folder, "jpeg", name);
 
+    /// <summary>
+    /// A scan that selects a Huffman table the decoder does not have — the selector is four bits, the tables
+    /// number four of each class — is refused, not used as an index past them.
+    /// </summary>
+    /// <param name="selectors">The table selector byte of the first scan component: DC in the high nibble, AC in the low.</param>
+    [Theory]
+    [InlineData(0x44)]
+    [InlineData(0x40)]
+    [InlineData(0x04)]
+    [InlineData(0xFF)]
+    public void Refuses_a_scan_that_selects_a_table_beyond_the_four_there_are(byte selectors)
+    {
+        var jpeg = (byte[])Rgb.Clone();
+        var scan = jpeg.AsSpan().IndexOf(new byte[] { 0xFF, 0xDA });
+
+        Assert.True(scan > 0, "the fixture has to carry a scan header");
+
+        // Marker, length (two bytes), component count, then the first component's id and its selectors.
+        jpeg[scan + 6] = selectors;
+
+        Assert.False(JpegDecoder.TryDecode(jpeg, 1 << 20, out var pixels, out _, out _, out _));
+        Assert.Null(pixels);
+    }
+
+    /// <summary>
+    /// A progressive scan whose spectral selection runs past coefficient 63, starts after it ends, or states a
+    /// successive approximation no 16-bit coefficient has is refused before it indexes the zig-zag table.
+    /// </summary>
+    /// <param name="field">Which field of the AC scan header is rewritten.</param>
+    /// <param name="value">The value it is rewritten to.</param>
+    [Theory]
+    [InlineData("end", 0xFF)]
+    [InlineData("end", 64)]
+    [InlineData("start-after-end", 0)]
+    [InlineData("approximation", 0xE0)]
+    [InlineData("approximation", 0x0E)]
+    public void Refuses_a_progressive_scan_outside_the_block(string field, int value)
+    {
+        var jpeg = (byte[])Progressive.Clone();
+        var position = 0;
+        var tail = -1;
+
+        // The first AC scan: a scan header whose spectral start is above zero.
+        while (tail < 0)
+        {
+            var scan = jpeg.AsSpan(position).IndexOf(new byte[] { 0xFF, 0xDA });
+
+            Assert.True(scan >= 0, "the fixture has to carry an AC scan");
+            scan += position;
+
+            var candidate = scan + 5 + (2 * jpeg[scan + 4]);
+
+            if (jpeg[candidate] > 0)
+            {
+                tail = candidate;
+            }
+
+            position = scan + 2;
+        }
+
+        switch (field)
+        {
+            case "end":
+                jpeg[tail + 1] = (byte)value;
+                break;
+
+            case "start-after-end":
+                jpeg[tail + 1] = (byte)value;
+                Assert.True(jpeg[tail] > value, "the scan has to start after the end it is given");
+                break;
+
+            default:
+                jpeg[tail + 2] = (byte)value;
+                break;
+        }
+
+        Assert.False(JpegDecoder.TryDecode(jpeg, 1 << 20, out var pixels, out _, out _, out _));
+        Assert.Null(pixels);
+    }
+
     /// <summary>A budget of exactly the output's size keeps the pixels; one byte less measures them.</summary>
     [Fact]
     public void Keeps_pixels_that_fit_the_budget_exactly()

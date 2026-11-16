@@ -473,6 +473,13 @@ internal sealed class JpegDecoder
                 return false;
             }
 
+            // A selector is four bits in the file and the decoder has four tables of each class: a selector
+            // above 3 would index past them, so it is a header this decoder cannot honour.
+            if (tables >> 4 > 3 || (tables & 15) > 3)
+            {
+                return false;
+            }
+
             component.DcTable = tables >> 4;
             component.AcTable = tables & 15;
             named[index] = component;
@@ -486,7 +493,11 @@ internal sealed class JpegDecoder
         scanHigh = segment[tail + 2] >> 4;
         scanLow = segment[tail + 2] & 15;
 
-        return true;
+        // The spectral selection names coefficients 0 to 63 of a block, start before end, and the successive
+        // approximation shifts no further than a 16-bit coefficient allows. A progressive scan indexes the
+        // zig-zag table with them, so a scan outside these bounds is refused rather than read past the
+        // table; a sequential scan states them too but decodes the whole block whatever they say.
+        return !progressive || (scanStart <= scanEnd && scanEnd <= 63 && scanHigh <= 13 && scanLow <= 13);
     }
 
     private void ParseAdobe(ReadOnlySpan<byte> segment)

@@ -146,9 +146,9 @@ jobs:
             dotnet "$tool" replay "$target" "$seeds/$target"
           done
 
-      # Each of the four documents reaches a failure class the review named. flate-bomb, length-chain and
-      # objstm-count are refused or read since the decode limit, the length-chain bound and the /N bound;
-      # jpeg-selector is a known defect until the change that fixes it removes its --known line.
+      # Each of the four documents reaches a failure class a review named, and each is now read: the decode
+      # limit, the length-chain bound, the /N bound and the JPEG scan-header checks closed them. A document
+      # that faults here again is a regression, so none is listed as known.
       - name: Hostile documents
         run: |
           set -euo pipefail
@@ -156,7 +156,6 @@ jobs:
           python docs/tools/corpus-robustness.py \
             --probe ./tools/SharpCorePDF.Validation/bin/Release/net11.0/SharpCorePDF.Validation.dll \
             --timeout 120 --report artifacts/hostile.json \
-            --known jpeg-selector.pdf \
             "$RUNNER_TEMP/hostile"
 
       - name: Upload the documents and the reports
