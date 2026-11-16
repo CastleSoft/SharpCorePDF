@@ -26,8 +26,10 @@ async function open(file, password) {
     const data = new Uint8Array(await readFile(path.join(corpus, file)));
     const task = pdfjs.getDocument({data, password, isEvalSupported: false, verbosity: 0});
 
+    // The loading task owns the document in pdf.js 6, which has no PDFDocumentProxy.destroy(): destroying
+    // the task is what releases both.
     try {
-        return await task.promise;
+        return {task, document: await task.promise};
     } catch (error) {
         await task.destroy();
         throw error;
@@ -36,8 +38,8 @@ async function open(file, password) {
 
 async function refuses(file, password) {
     try {
-        const document = await open(file, password);
-        await document.destroy();
+        const {task} = await open(file, password);
+        await task.destroy();
         return false;
     } catch (error) {
         return error?.name === "PasswordException";
@@ -51,7 +53,7 @@ for (const entry of manifest.encryption) {
     const problems = [];
 
     try {
-        const document = await open(entry.file, entry.userPassword);
+        const {task, document} = await open(entry.file, entry.userPassword);
         const page = await document.getPage(1);
         const content = await page.getTextContent();
         const text = normalise(content.items.map((item) => item.str + (item.hasEOL ? "\n" : "")).join(""));
@@ -61,14 +63,14 @@ for (const entry of manifest.encryption) {
             problems.push(`page 1 text does not contain ${JSON.stringify(first)}`);
         }
 
-        await document.destroy();
+        await task.destroy();
     } catch (error) {
         problems.push(`the user password did not open it: ${error?.name}: ${error?.message}`);
     }
 
     try {
-        const document = await open(entry.file, entry.ownerPassword);
-        await document.destroy();
+        const {task} = await open(entry.file, entry.ownerPassword);
+        await task.destroy();
     } catch (error) {
         problems.push(`the owner password did not open it: ${error?.name}: ${error?.message}`);
     }
