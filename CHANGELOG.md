@@ -42,6 +42,10 @@ against an empty feed.
 
 ### Fixed
 
+- **Looking for signatures in a form no longer takes exponential time.** The walk of the form's field tree was
+  bounded in depth but followed every path, so a form whose levels each list the next level twice has two to the
+  power of its depth paths: forty levels, a 2.6 KB file, and the validation never finished. The `document` fuzz
+  target found it as a timeout. Each field is now read once, as the other field-tree walks already do.
 - **A media box whose digits overflow a double no longer crashes a read or an edit.** A number too large for a
   double reads as infinite, and three readers passed it to a constructor that refuses it, so the `document` fuzz
   target found a 378-byte file that threw `ArgumentOutOfRangeException` from the inspection, the page reader and

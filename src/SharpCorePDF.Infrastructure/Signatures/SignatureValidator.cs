@@ -45,10 +45,11 @@ internal static class SignatureValidator
 
         var fields = new List<SignatureField>();
         var seen = new HashSet<PdfDictionary>(ReferenceEqualityComparer.Instance);
+        var walked = new HashSet<PdfDictionary>(ReferenceEqualityComparer.Instance);
 
         if (reader.Catalog is { } catalog && reader.ResolveDictionary(catalog.Get("AcroForm")) is { } form)
         {
-            Walk(reader, reader.ResolveArray(form.Get("Fields")), string.Empty, fields, seen, 0);
+            Walk(reader, reader.ResolveArray(form.Get("Fields")), string.Empty, fields, seen, walked, 0);
         }
 
         CollectFromPages(reader, fields, seen);
@@ -62,10 +63,13 @@ internal static class SignatureValidator
     /// <param name="prefix">The qualified name the parent contributes.</param>
     /// <param name="fields">The list the signature fields are added to.</param>
     /// <param name="seen">The signature dictionaries already added.</param>
+    /// <param name="walked">The fields already visited, so a field a form lists under more than one parent is read once.</param>
     /// <param name="depth">How deep the walk already is.</param>
     /// <remarks>
     /// A tree deeper than the limit is cut off and the cut is recorded on the reader, so the answer about
-    /// the document is never quietly narrower than the document itself.
+    /// the document is never quietly narrower than the document itself. A field is visited once: a form whose
+    /// levels each list the next level twice has two to the power of its depth paths, and was never going to
+    /// finish.
     /// </remarks>
     private static void Walk(
         PdfFileReader reader,
@@ -73,6 +77,7 @@ internal static class SignatureValidator
         string prefix,
         List<SignatureField> fields,
         HashSet<PdfDictionary> seen,
+        HashSet<PdfDictionary> walked,
         int depth)
     {
         if (array is null)
@@ -93,7 +98,7 @@ internal static class SignatureValidator
 
         foreach (var item in array.Items)
         {
-            if (reader.ResolveDictionary(item) is not { } field)
+            if (reader.ResolveDictionary(item) is not { } field || !walked.Add(field))
             {
                 continue;
             }
@@ -114,7 +119,7 @@ internal static class SignatureValidator
 
             if (field.GetName("FT") is null && kids is not null)
             {
-                Walk(reader, kids, qualified, fields, seen, depth + 1);
+                Walk(reader, kids, qualified, fields, seen, walked, depth + 1);
 
                 if (field.Get("V") is null)
                 {
